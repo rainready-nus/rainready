@@ -1,0 +1,19 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies and generated outputs
+node_modules/
+dist/
+coverage/
+.aws-sam/
+samconfig.toml
+
+# Local/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
