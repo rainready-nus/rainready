@@ -12,6 +12,13 @@ test("uses the proposed component weights and returns an explanation", () => {
   assert.match(result.reasons[0], /forecast contributed 40 points/);
 });
 
+test("omits unavailable history and renormalises available component weights", () => {
+  const result = assessRisk({ forecastSeverity: 80, rainfallScore: 40, historicalProbability: null, sensitivity: 60 });
+  assert.equal(result.breakdown.history, undefined);
+  assert.ok(Math.abs(result.breakdown.forecast.weight + result.breakdown.rainfall.weight + result.breakdown.sensitivity.weight - 1) < 1e-12);
+  assert.equal(result.score, 67);
+});
+
 test("classifies score-band boundaries", () => {
   assert.equal(assessRisk({ ...base, forecastSeverity: 58 }).riskLevel, "low"); // 29
   assert.equal(assessRisk({ ...base, forecastSeverity: 60 }).riskLevel, "medium"); // 30

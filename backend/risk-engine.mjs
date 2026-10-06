@@ -4,7 +4,8 @@
  */
 const WEIGHTS = Object.freeze({ forecast: 0.50, rainfall: 0.20, history: 0.15, sensitivity: 0.15 });
 
-function scoreInput(name, value) {
+function scoreInput(name, value, optional = false) {
+  if (optional && (value === null || value === undefined)) return null;
   if (!Number.isFinite(value) || value < 0 || value > 100) {
     throw new RangeError(`${name} must be a finite number between 0 and 100`);
   }
@@ -27,10 +28,21 @@ export function assessRisk({
 }) {
   const inputs = {
     forecast: scoreInput("forecastSeverity", forecastSeverity),
-    rainfall: scoreInput("rainfallScore", rainfallScore),
-    history: scoreInput("historicalProbability", historicalProbability),
+    rainfall: scoreInput("rainfallScore", rainfallScore, true),
+    history: scoreInput("historicalProbability", historicalProbability, true),
     sensitivity: scoreInput("sensitivity", sensitivity),
   };
+  const availableInputs = Object.fromEntries(Object.entries(inputs).filter(([, value]) => value !== null));
+  const availableWeight = Object.keys(availableInputs).reduce((total, key) => total + WEIGHTS[key], 0);
+  const breakdown = Object.fromEntries(Object.entries(availableInputs).map(([key, value]) => {
+    const effectiveWeight = WEIGHTS[key] / availableWeight;
+    return [key, {
+      input: value,
+      baseWeight: WEIGHTS[key],
+      weight: Number(effectiveWeight.toFixed(4)),
+      contribution: Number((value * effectiveWeight).toFixed(2)),
+    }];
+  }));
 
   // Safety override: a confirmed official alert bypasses ordinary score thresholds.
   if (lightningStatus === "confirmed_alert") {
@@ -40,7 +52,7 @@ export function assessRisk({
       recommendedAction: "stop_and_shelter",
       override: true,
       reasons: ["Confirmed lightning alert: stop outdoor activity and seek shelter."],
-      breakdown: Object.fromEntries(Object.entries(inputs).map(([key, value]) => [key, {
+      breakdown: Object.fromEntries(Object.entries(availableInputs).map(([key, value]) => [key, {
         input: value,
         weight: WEIGHTS[key],
         contribution: Number((value * WEIGHTS[key]).toFixed(2)),
@@ -48,11 +60,6 @@ export function assessRisk({
     };
   }
 
-  const breakdown = Object.fromEntries(Object.entries(inputs).map(([key, value]) => [key, {
-    input: value,
-    weight: WEIGHTS[key],
-    contribution: Number((value * WEIGHTS[key]).toFixed(2)),
-  }]));
   const score = Math.round(Object.values(breakdown).reduce((total, part) => total + part.contribution, 0));
   return {
     score,

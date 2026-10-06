@@ -4,11 +4,11 @@ RainReady is a cloud-service prototype for helping organisers monitor weather ri
 
 ## Current prototype
 
-The current milestone connects the browser prototype to a small local Node.js backend. Demo event records and illustrative risk scores remain in browser local storage; clicking **Check live weather** retrieves and displays current NEA forecast, rainfall, and lightning-observation data for that event's coordinates.
+The current milestone connects the browser prototype to a small local Node.js backend. Demo event records remain in browser local storage; clicking **Check live risk** retrieves NEA forecast, rainfall, and lightning-observation data and calculates an explainable score for that event's coordinates and sensitivity. Historical probability is explicitly excluded until validated.
 
 The prototype supports:
 
-- viewing multiple outdoor events and their demo risk summaries;
+- viewing multiple outdoor events and their demo risk summaries, replaced by a live assessment when requested;
 - adding an event;
 - reviewing a plain-language risk explanation;
 - recording an organiser decision;

@@ -1,6 +1,6 @@
 # Local API contract (implemented prototype)
 
-The dependency-free local Node.js server currently implements `GET /health` and `GET /api/weather`. Event records, authentication, persistence and automated risk assessments remain future work. All timestamps should be ISO 8601; displayed Singapore times use `Asia/Singapore`.
+The dependency-free local Node.js server currently implements `GET /health`, `GET /api/weather`, and `GET /api/assessment`. Event records, authentication and persistence remain future work. All timestamps should be ISO 8601; displayed Singapore times use `Asia/Singapore`.
 
 ## `GET /health`
 
@@ -22,7 +22,15 @@ The response contains `retrievedAt`, the requested `location`, and a `sources` o
 
 Invalid/missing coordinates return HTTP 400. Unhandled upstream errors return HTTP 502. Individual source failures are isolated in a successful snapshot response, so the UI can display partial data.
 
-The prototype frontend calls this same-origin endpoint when the organiser presses **Check live weather**. Venue coordinates are entered manually; OneMap geocoding is not implemented yet.
+The prototype frontend calls this same-origin endpoint as part of **Check live risk**. Venue coordinates are entered manually; OneMap geocoding is not implemented yet.
+
+## `GET /api/assessment?latitude={lat}&longitude={lon}&sensitivity={low|medium|high}`
+
+Fetches the same source snapshot and adds an `assessment` object. Forecast severity, the nearest station's latest five-minute total rainfall, and event sensitivity are mapped to 0–100 inputs. The [NEA rainfall dataset](https://data.gov.sg/datasets/d_6580738cdd7db79374ed3152159fbd69/view) describes precipitation at weather-station level and updates every five minutes; the score mapping is a RainReady assumption, not an NEA hazard threshold.
+
+Base component weights are forecast 0.50, rainfall 0.20, historical probability 0.15, and sensitivity 0.15. Historical probability is currently `null` and excluded because no validated event-matched value is available. Missing inputs are excluded and remaining weights are renormalised; the response exposes the effective weights, component reasons, and `excludedComponents`. If the forecast is unavailable, no numeric score is returned and manual review is required. If rainfall is unavailable, the score is marked partial.
+
+This risk mapping is an experimental course-project heuristic, not a guarantee of safety or official NEA advice. Lightning observations remain separate context and are never interpreted as an official warning or all-clear.
 
 ## Planned event endpoints (not implemented)
 
