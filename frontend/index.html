@@ -38,12 +38,12 @@
 
         <section class="metrics" aria-label="Event summary">
           <div class="metric"><div class="metric-label">Events monitored <span class="metric-symbol">▦</span></div><div class="metric-value" id="metricEvents">3</div><div class="metric-foot">Across your demo workspace</div></div>
-          <div class="metric"><div class="metric-label">Need attention <span class="metric-symbol amber">!</span></div><div class="metric-value" id="metricAttention">2</div><div class="metric-foot">High or critical demo risk</div></div>
+          <div class="metric"><div class="metric-label">Need attention <span class="metric-symbol amber">!</span></div><div class="metric-value" id="metricAttention">2</div><div class="metric-foot">High or critical based on available checked risk</div></div>
           <div class="metric"><div class="metric-label">Decisions recorded <span class="metric-symbol blue">✓</span></div><div class="metric-value" id="metricDecisions">1</div><div class="metric-foot">Organiser actions in this browser</div></div>
           <div class="metric"><div class="metric-label">Data freshness <span class="metric-symbol red">◷</span></div><div class="metric-value" id="metricFreshness" style="font-size:19px">Not checked</div><div class="metric-foot">Check an event for live readings</div></div>
         </section>
 
-        <div class="section-heading"><div><h2>Upcoming outdoor events</h2><p>Prioritised by the current demonstration risk rules.</p></div><div class="filters"><button class="filter">Next 24 hours　⌄</button><button class="filter">All risk levels　⌄</button></div></div>
+        <div class="section-heading"><div><h2>Upcoming outdoor events</h2><p>Check live risk for weather-based scoring; unchecked events retain illustrative demo scores.</p></div><div class="filters"><button class="filter">Next 24 hours　⌄</button><button class="filter">All risk levels　⌄</button></div></div>
         <section class="event-list" id="eventList" aria-live="polite"></section>
 
         <div class="lower-grid">
@@ -71,7 +71,7 @@
   </div><div class="form-actions"><button class="secondary" type="button" id="cancelModal">Cancel</button><button class="primary" type="submit">Create demo event</button></div></form></div></div>
   <div class="toast" id="toast" role="status"></div>
   <script>
-    // Demonstration fixtures only. Replace this adapter with the agreed backend API before treating readings as live.
+    // Event records remain demo fixtures; current weather and risk assessments are fetched from the local backend on demand.
     const seedEvents=[
       {id:"e1",name:"NUS Outdoor Movie Night",venue:"University Town Green",latitude:1.304,longitude:103.773,dateOffset:0,time:"18:30",type:"Community gathering",sensitivity:"high",forecast:"Not checked",rain:"Not checked",risk:78,reasons:["Demo risk score only; check live weather for current source readings","High-sensitivity event with limited setup flexibility"],decision:"prepare",emoji:"▣"},
       {id:"e2",name:"Campus Run Club",venue:"Kent Ridge Campus",latitude:1.296,longitude:103.776,dateOffset:0,time:"17:45",type:"Sports",sensitivity:"medium",forecast:"Not checked",rain:"Not checked",risk:48,reasons:["Demo risk score only; check live weather for current source readings","Outdoor activity has moderate weather sensitivity"],decision:null,emoji:"⌁"},
