@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { getWeatherSnapshot } from "./weather-data.mjs";
+import { buildRiskAssessment } from "./risk-assessment.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendPath = path.join(root, "frontend", "index.html");
@@ -52,6 +53,33 @@ export function createServer({ snapshot = getWeatherSnapshot, cache = new Map() 
         return sendJson(response, 502, {
           error: "weather_service_error",
           message: "RainReady could not retrieve a weather snapshot.",
+          detail: error.message,
+        });
+      }
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/assessment") {
+      let latitude;
+      let longitude;
+      const sensitivity = url.searchParams.get("sensitivity");
+      try {
+        latitude = parseCoordinate(url.searchParams.get("latitude"), "latitude", -90, 90);
+        longitude = parseCoordinate(url.searchParams.get("longitude"), "longitude", -180, 180);
+        if (!["low", "medium", "high"].includes(sensitivity)) {
+          throw new RangeError("sensitivity must be low, medium, or high");
+        }
+      } catch (error) {
+        return sendJson(response, 400, { error: "invalid_assessment_input", message: error.message });
+      }
+
+      try {
+        const snapshotResult = await snapshot({ latitude, longitude, cache });
+        const assessment = buildRiskAssessment({ snapshot: snapshotResult, sensitivity });
+        return sendJson(response, 200, { ...snapshotResult, assessment });
+      } catch (error) {
+        return sendJson(response, 502, {
+          error: "assessment_service_error",
+          message: "RainReady could not produce a risk assessment.",
           detail: error.message,
         });
       }
