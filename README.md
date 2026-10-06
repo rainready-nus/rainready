@@ -4,7 +4,7 @@ RainReady is a cloud-service prototype for helping organisers monitor weather ri
 
 ## Current prototype
 
-The first milestone is a browser-based, interactive frontend prototype in `frontend/index.html`. It uses clearly labelled sample data and browser local storage so the team can test the user journey before the backend and official data integrations are ready.
+The current milestone connects the browser prototype to a small local Node.js backend. Demo event records and illustrative risk scores remain in browser local storage; clicking **Check live weather** retrieves and displays current NEA forecast, rainfall, and lightning-observation data for that event's coordinates.
 
 The prototype supports:
 
@@ -13,13 +13,24 @@ The prototype supports:
 - reviewing a plain-language risk explanation;
 - recording an organiser decision;
 - simulating an official lightning alert to demonstrate the safety override;
-- recording an in-app notification action and decision history.
+- recording an in-app notification action and decision history;
+- retrieving live source readings through the local backend and showing source freshness and nearest area/station.
 
-**Important:** The prototype does not yet call NEA, OneMap, AWS, email, or any live weather API. The sample scores are for interface demonstration only and are not operational safety guidance. A lightning alert simulation requires the organiser to record the stop decision; the system never auto-resumes an activity.
+**Important:** Live readings currently do not affect the illustrative demo risk score. Lightning observations are not an official warning or all-clear. A lightning alert simulation is not connected to NEA; the organiser must record the stop decision, and the system never auto-resumes an activity. No OneMap geocoding, email, authentication, or AWS deployment is included yet.
 
 ## Run locally
 
-Open `frontend/index.html` in a modern browser. No package installation is needed for this initial UI prototype.
+Requires Node.js 18 or later. Start the backend from the repository root:
+
+```sh
+node backend/server.mjs
+```
+
+Open `http://127.0.0.1:8787`. To run automated tests:
+
+```sh
+node --test backend/*.test.mjs
+```
 
 ## Planned architecture
 
@@ -40,4 +51,4 @@ Use short feature branches and Pull Requests. Keep `main` runnable; discuss API 
 
 ## Project status
 
-This is an early course-project prototype. The frontend currently uses demonstration fixtures; backend APIs, authentication, official data ingestion, evaluation, and AWS deployment remain planned work.
+This is an early course-project prototype. The local `/health` and `/api/weather` endpoints and on-demand NEA integration are implemented. Persistent events, authentication, automated refresh, institutional warning integration, evaluation, and AWS deployment remain planned work.
