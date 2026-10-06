@@ -1,7 +1,7 @@
-# Backend — planned
+# Backend and risk engine
 
-The backend has not been implemented yet. Keep weather API credentials and future secrets on the server side; never place them in browser JavaScript.
+The first backend milestone is the standalone, dependency-free risk rules module in `risk-engine.mjs`. It accepts normalised component scores and returns an explainable assessment. Run its tests with `node --test risk-engine.test.mjs`.
 
-The initial API contract is in [`../docs/api-contract.md`](../docs/api-contract.md). A suitable first backend milestone is an API Gateway + Lambda service with a `/health` endpoint and event CRUD endpoints, followed by DynamoDB persistence and weather adapters.
+The HTTP API, persistence, authentication, and weather adapters are not implemented yet. The proposed API contract is in [`../docs/api-contract.md`](../docs/api-contract.md). A suitable next milestone is API Gateway + Lambda with `/health` and event endpoints, followed by DynamoDB persistence and server-side weather adapters.
 
-Before deploying, confirm that the course-provided AWS role permits the required services. Use the approved temporary sign-in flow; do not create or commit long-lived AWS access keys.
+The initial weights and bands are project assumptions for testing and must be calibrated and reviewed. They are not official NEA risk thresholds or a safety guarantee. Confirmed lightning status is handled as a separate override, not blended into the normal weighted score.
