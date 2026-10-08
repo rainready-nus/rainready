@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { createServer } from "./server.mjs";
+import { createEventStore } from "./event-store.mjs";
 
 async function withServer(options, run) {
   const server = createServer(options);
@@ -17,7 +21,9 @@ test("health endpoint returns service status", async () => {
   await withServer({}, async (base) => {
     const response = await fetch(`${base}/health`);
     assert.equal(response.status, 200);
-    assert.equal((await response.json()).status, "ok");
+    const body = await response.json();
+    assert.equal(body.status, "ok");
+    assert.equal(body.version, "0.5.0");
   });
 });
 
@@ -68,3 +74,99 @@ test("unknown route returns 404", async () => {
     assert.equal(response.status, 404);
   });
 });
+
+test("event API creates, lists, updates, and deletes an event with persisted data", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "rainready-api-events-"));
+  const store = createEventStore({ databasePath: path.join(directory, "events.sqlite"), legacyFilePath: null });
+  try {
+    await withServer({ store }, async (base) => {
+      const payload = {
+        name: "Campus Sports Day",
+        venue: "University Town Green",
+        venueAddress: "NUS",
+        latitude: 1.304,
+        longitude: 103.773,
+        backupVenue: { name: "Sports Hall", latitude: 1.296, longitude: 103.78 },
+        participantCount: 120,
+        date: "2026-11-18",
+        time: "16:00",
+        type: "Sports",
+        sensitivity: "high",
+      };
+      const createdResponse = await fetch(`${base}/api/events`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      assert.equal(createdResponse.status, 201);
+      const { event } = await createdResponse.json();
+      assert.equal(event.backupVenue.name, "Sports Hall");
+      assert.equal(event.participantCount, 120);
+
+      const list = await fetch(`${base}/api/events`);
+      assert.deepEqual((await list.json()).events.map((item) => item.id), [event.id]);
+      const updated = await fetch(`${base}/api/events/${event.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ participantCount: 140 }),
+      });
+      assert.equal((await updated.json()).event.participantCount, 140);
+
+      const invalid = await fetch(`${base}/api/events`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...payload, longitude: 200 }),
+      });
+      assert.equal(invalid.status, 400);
+
+      const deleted = await fetch(`${base}/api/events/${event.id}`, { method: "DELETE" });
+      assert.equal(deleted.status, 200);
+      assert.deepEqual((await (await fetch(`${base}/api/events`)).json()).events, []);
+    });
+  } finally {
+    store.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("decision API stores the organiser reason and returns a preview that was not sent", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "rainready-decision-api-"));
+  const store = createEventStore({ databasePath: path.join(directory, "events.sqlite"), legacyFilePath: null });
+  try {
+    await withServer({ store }, async (base) => {
+      const create = await fetch(`${base}/api/events`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Decision Test", venue: "Test venue", latitude: 1.3, longitude: 103.8,
+          backupVenue: { name: "Test hall", latitude: 1.31, longitude: 103.81 }, participantCount: 25,
+          date: "2026-11-20", time: "16:00", type: "Sports", sensitivity: "high",
+        }),
+      });
+      const { event } = await create.json();
+      const invalid = await fetch(`${base}/api/events/${event.id}/decisions`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "cancel", reason: " " }),
+      });
+      assert.equal(invalid.status, 400);
+
+      const response = await fetch(`${base}/api/events/${event.id}/decisions`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "relocate", reason: "Heavy showers near the venue." }),
+      });
+      const body = await response.json();
+      assert.equal(response.status, 201);
+      assert.equal(body.decision.reason, "Heavy showers near the venue.");
+      assert.equal(body.decision.testNotification.status, "not_sent");
+      assert.match(body.decision.testNotification.message, /Test hall/);
+      assert.equal(body.event.decisions.length, 1);
+
+      const history = await fetch(`${base}/api/events/${event.id}/decisions`);
+      assert.deepEqual((await history.json()).decisions, [body.decision]);
+    });
+  } finally {
+    store.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
