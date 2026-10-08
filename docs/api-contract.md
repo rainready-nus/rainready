@@ -1,6 +1,6 @@
 # Local API contract (implemented prototype)
 
-The dependency-free local Node.js server currently implements `GET /health`, `GET /api/geocode`, `GET /api/weather`, `GET /api/assessment`, event CRUD, and organiser-decision endpoints. Event records, decisions and test-notification previews persist in local SQLite; authentication and managed cloud persistence remain future work. All timestamps should be ISO 8601; displayed Singapore times use `Asia/Singapore`.
+The dependency-free local Node.js server implements local authentication, organisation membership/invitations, `GET /health`, `GET /api/geocode`, `GET /api/weather`, `GET /api/assessment`, event CRUD, and organiser-decision endpoints. Event records, accounts, memberships, sessions, decisions and test-notification previews persist in local SQLite. This local identity implementation is for loopback course-prototype use only; production identity and managed cloud persistence remain future work. All timestamps should be ISO 8601; displayed Singapore times use `Asia/Singapore`.
 
 ## `GET /health`
 
@@ -13,6 +13,20 @@ Returns service status and prototype version.
   "checkedAt": "2026-10-06T10:00:00+08:00"
 }
 ```
+
+## Local authentication and organisations
+
+- `POST /api/auth/register` accepts `{ "email", "password", "organizationName", "invitationCode?" }`. Passwords must contain 12–128 characters. With no invitation code, registration creates a new private organisation and the user is its owner. With a valid unexpired one-time invitation code, the user joins that organisation as a member; an organization name is then not required. Successful registration returns the user and memberships and sets a 12-hour `rainready_session` cookie.
+- `POST /api/auth/login` accepts `{ "email", "password" }`. Credentials are checked with a generic failure response. Successful login rotates the session and sets the same cookie.
+- `POST /api/auth/logout` deletes the current session and clears the cookie.
+- `GET /api/auth/me` returns the current user and their organisation memberships, or HTTP 401.
+- `POST /api/auth/invitations` requires a signed-in organisation owner and `X-RainReady-Organization`. It returns one invitation code, shown only once, which expires after seven days. Store only the SHA-256 hash of the code; the first successful registration consumes it.
+
+Passwords are salted scrypt hashes. Session tokens and invitation codes are high-entropy random values stored only as SHA-256 hashes. The session cookie is `HttpOnly; SameSite=Strict; Path=/` and receives `Secure` when the app is served over TLS or `RAINREADY_COOKIE_SECURE=true`. Authentication endpoints do not expose the password hash, session token or invitation hash. Login and registration are rate-limited per source IP in this single-process prototype.
+
+Every private API call must include the cookie and an `X-RainReady-Organization` header. The backend verifies that the cookie resolves to an unexpired session and that the user belongs to the selected organisation. A missing session returns HTTP 401; a missing organization returns HTTP 400; an organization the user does not belong to returns HTTP 403. Event lookups, updates, decision history and deletion are scoped in SQL by both event ID and organization ID; a cross-organisation event ID returns HTTP 404. The frontend's organization selector only chooses a requested context; it is not the security boundary.
+
+This custom local authentication is **not production-ready**: there is no verified email, password reset/account recovery, MFA, durable distributed rate limiting, security monitoring, hardened TLS/proxy configuration, or managed identity integration. Keep the server bound to loopback. Do not expose it to the internet or deploy it to AWS. Before cloud release, replace local account authentication with a managed identity provider (for example Cognito), verify access tokens in the backend, provision organization membership securely, and conduct a security review.
 
 ## `GET /api/geocode?query={place-or-address}`
 
@@ -53,7 +67,7 @@ This risk mapping is an experimental course-project heuristic, not a guarantee o
 
 ## Event endpoints (implemented locally)
 
-All event routes use the `/api` prefix. `GET /api/events` returns `{ "events": [...] }`; `POST /api/events` validates and creates an event, returning HTTP 201 and `{ "event": ... }`. `GET /api/events/{eventId}` retrieves one event. `PATCH /api/events/{eventId}` validates and updates supplied fields while retaining omitted fields. `DELETE /api/events/{eventId}` deletes it. Unknown event IDs return HTTP 404; invalid input returns HTTP 400.
+All event routes use the `/api` prefix and require a valid session plus `X-RainReady-Organization`. `GET /api/events` returns only the active organisation's `{ "events": [...] }`; `POST /api/events` validates and creates an event in that organisation, returning HTTP 201 and `{ "event": ... }`. `GET /api/events/{eventId}` retrieves one event only when it belongs to that organisation. `PATCH /api/events/{eventId}` validates and updates supplied fields while retaining omitted fields. `DELETE /api/events/{eventId}` deletes only within that organisation. Unknown or other-organisation event IDs return HTTP 404; invalid input returns HTTP 400.
 
 An event contains `id`, `name`, `venue`, optional `venueAddress`, `latitude`, `longitude`, optional `backupVenue` (`name`, optional `address`, `latitude`, `longitude`), `participantCount`, `date` (`YYYY-MM-DD`), `time` (`HH:MM`), `type`, `sensitivity` (`low`, `medium`, or `high`), and ISO `createdAt` / `updatedAt` timestamps. Participant count must be a whole number from 0 to 100000; coordinates are range-checked. A backup venue must have both coordinates so that it can be assessed separately.
 
