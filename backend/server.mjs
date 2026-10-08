@@ -6,6 +6,7 @@ import { getWeatherSnapshot } from "./weather-data.mjs";
 import { buildRiskAssessment } from "./risk-assessment.mjs";
 import { createEventStore } from "./event-store.mjs";
 import { createEventService, EventValidationError } from "./event-service.mjs";
+import { searchOneMap, GeocodingConfigurationError, GeocodingUpstreamError } from "./geocoding.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendPath = path.join(root, "frontend", "index.html");
@@ -44,7 +45,7 @@ async function readJsonBody(request) {
   }
 }
 
-export function createServer({ snapshot = getWeatherSnapshot, cache = new Map(), store = eventStore, service } = {}) {
+export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchOneMap, cache = new Map(), store = eventStore, service } = {}) {
   const events = service ?? createEventService(store);
   return createHttpServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
@@ -54,6 +55,28 @@ export function createServer({ snapshot = getWeatherSnapshot, cache = new Map(),
         version: "0.5.0",
         checkedAt: new Date().toISOString(),
       });
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/geocode") {
+      const query = (url.searchParams.get("query") ?? "").trim();
+      if (query.length < 3 || query.length > 120) {
+        return sendJson(response, 400, { error: "invalid_search_query", message: "Enter a place name or address between 3 and 120 characters." });
+      }
+      try {
+        const results = await geocoder({ query });
+        return sendJson(response, 200, { query, results });
+      } catch (error) {
+        if (error instanceof RangeError) {
+          return sendJson(response, 400, { error: "invalid_search_query", message: error.message });
+        }
+        if (error instanceof GeocodingConfigurationError) {
+          return sendJson(response, 503, { error: "geocoding_not_configured", message: "Address search is not configured. Add a OneMap access token to the backend environment; no credentials are sent to the browser." });
+        }
+        if (error instanceof GeocodingUpstreamError) {
+          return sendJson(response, 502, { error: "geocoding_service_error", message: error.message });
+        }
+        return sendJson(response, 502, { error: "geocoding_service_error", message: "RainReady could not search this location. Please try again." });
+      }
     }
 
     if (url.pathname === "/api/events" && request.method === "GET") {

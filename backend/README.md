@@ -1,6 +1,6 @@
 # RainReady backend prototype
 
-`weather-data.mjs` fetches and normalises NEA real-time feeds. `risk-assessment.mjs` maps current readings and organiser-selected event sensitivity into an explainable prototype assessment. `server.mjs` exposes these through HTTP. `event-service.mjs` owns input validation and event/decision rules; `event-store.mjs` is the SQLite persistence adapter.
+`weather-data.mjs` fetches and normalises NEA real-time feeds. `geocoding.mjs` calls the OneMap Search API from the backend and normalises selectable venue matches. `risk-assessment.mjs` maps current readings and organiser-selected event sensitivity into an explainable prototype assessment. `server.mjs` exposes these through HTTP. `event-service.mjs` owns input validation and event/decision rules; `event-store.mjs` is the SQLite persistence adapter.
 
 ## Run and test
 
@@ -11,7 +11,7 @@ npm start
 npm test
 ```
 
-The local server listens on `127.0.0.1:8787` by default. Set `PORT` to use another port. No NEA API key is required by this local prototype.
+The local server listens on `127.0.0.1:8787` by default. Set `PORT` to use another port. No NEA API key is required by this local prototype. To enable `GET /api/geocode`, copy `.env.example` to `.env` and set `ONEMAP_ACCESS_TOKEN`. The search token is sent only from the backend to OneMap and expires after three days; update it when expired. Without the token, the rest of the service remains available and geocoding returns HTTP 503.
 
 ## Persistence and data scope
 
