@@ -1,6 +1,6 @@
 # Local API contract (implemented prototype)
 
-The dependency-free local Node.js server currently implements `GET /health`, `GET /api/weather`, and `GET /api/assessment`. Event records, authentication and persistence remain future work. All timestamps should be ISO 8601; displayed Singapore times use `Asia/Singapore`.
+The dependency-free local Node.js server currently implements `GET /health`, `GET /api/weather`, `GET /api/assessment`, event CRUD, and organiser-decision endpoints. Event records, decisions and test-notification previews persist in local SQLite; authentication and managed cloud persistence remain future work. All timestamps should be ISO 8601; displayed Singapore times use `Asia/Singapore`.
 
 ## `GET /health`
 
@@ -9,7 +9,7 @@ Returns service status and prototype version.
 ```json
 {
   "status": "ok",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "checkedAt": "2026-10-06T10:00:00+08:00"
 }
 ```
@@ -32,13 +32,27 @@ Base component weights are forecast 0.50, rainfall 0.20, historical probability 
 
 This risk mapping is an experimental course-project heuristic, not a guarantee of safety or official NEA advice. Lightning observations remain separate context and are never interpreted as an official warning or all-clear.
 
-## Planned event endpoints (not implemented)
+## Event endpoints (implemented locally)
 
-`GET /events`, `POST /events`, `GET /events/{eventId}/assessment`, and `POST /events/{eventId}/decisions` remain future work. Event records currently stay in browser local storage.
+All event routes use the `/api` prefix. `GET /api/events` returns `{ "events": [...] }`; `POST /api/events` validates and creates an event, returning HTTP 201 and `{ "event": ... }`. `GET /api/events/{eventId}` retrieves one event. `PATCH /api/events/{eventId}` validates and updates supplied fields while retaining omitted fields. `DELETE /api/events/{eventId}` deletes it. Unknown event IDs return HTTP 404; invalid input returns HTTP 400.
+
+An event contains `id`, `name`, `venue`, optional `venueAddress`, `latitude`, `longitude`, optional `backupVenue` (`name`, optional `address`, `latitude`, `longitude`), `participantCount`, `date` (`YYYY-MM-DD`), `time` (`HH:MM`), `type`, `sensitivity` (`low`, `medium`, or `high`), and ISO `createdAt` / `updatedAt` timestamps. Participant count must be a whole number from 0 to 100000; coordinates are range-checked. A backup venue must have both coordinates so that it can be assessed separately.
+
+The default SQLite database is `backend/data/rainready.sqlite`; `RAINREADY_DB_FILE` can override its location. On first startup, if `backend/data/events.json` exists, it is imported once and preserved unchanged as a recovery copy. `RAINREADY_LEGACY_DATA_FILE` can select another legacy JSON source; point it to a non-existent path to disable import. The SQLite schema stores event data in `events`, organiser decision history in `event_decisions`, and test previews in `notification_previews`; foreign keys cascade decision/preview deletion with their event. `legacy_imports` records completed imports. The schema contains only participant count, not contact details or other participant personal data. This single-machine prototype database has no authentication, automatic encryption, or backup and is not for multi-instance production deployment. Cloud deployment should replace this adapter with secured managed storage such as the proposed RDS PostgreSQL option.
+
+## Decision and notification-test endpoints
+
+`POST /api/events/{eventId}/decisions` requires an `action` (`continue`, `prepare`, `relocate`, `postpone`, or `cancel`) and a non-empty `reason` of at most 1000 characters. A relocation decision is rejected unless the event has a backup venue. It saves the organiser decision, ISO timestamp, and a test-notification preview in the event's decision history, then returns HTTP 201 with `{ "decision", "event" }`. `GET /api/events/{eventId}/decisions` returns the saved `{ "decisions": [...] }`; event retrieval also includes its decision history.
+
+Every preview is labelled `mode: "test"` and `status: "not_sent"`, with an intended participant count but no participant addresses. There is no email, SMS, push provider, or network-delivery code in this prototype. The interface states that the preview was not sent. A future live-notification feature must be designed and explicitly enabled separately.
+
+## Local configuration and secret handling
+
+The optional `.env.example` contains only non-secret local defaults; `.env` and local database files are ignored by Git. Do not commit OneMap tokens, passwords, AWS credentials, private keys, or participant personal data. For a future AWS deployment, store runtime secrets in AWS Secrets Manager and grant the backend a least-privilege IAM execution role. For GitHub Actions deployment, prefer OIDC role federation and narrowly scoped GitHub Actions secrets/permissions rather than long-lived AWS keys. The app currently needs no OneMap token because address geocoding is not implemented.
 
 ## `GET /events/{eventId}/assessment`
 
-The eventual assessment endpoint should return component explanations, source timestamps, and freshness state.
+The event-specific assessment endpoint is future work; the current assessment endpoint accepts venue coordinates directly. A future event-specific endpoint should return component explanations, source timestamps, and freshness state.
 
 ```json
 {
@@ -52,13 +66,10 @@ The eventual assessment endpoint should return component explanations, source ti
 }
 ```
 
-## `POST /events/{eventId}/decisions`
-
-Records an organiser decision (`continue`, `prepare`, `relocate`, `postpone`, `cancel`, or `stop_and_shelter`) with actor, timestamp, and optional note. The audit trail must preserve the decision and must not infer that an event has resumed after a lightning warning.
-
 ## Safety and data notes
 
 - The current NEA lightning observation feed is observational context, not an official warning or all-clear. Do not use absence of returned observations to infer safety. Any future official warning integration should be a separate safety override, with explicit source attribution and no automatic resumption.
 - The risk score and thresholds are prototype assumptions, not official NEA thresholds or guarantees of safety.
 - Historical datasets are for later calibration/evaluation, not a substitute for current official alerts.
 - API failures must be visible to users; retain the last valid reading only with its original timestamp and a stale-data label.
+

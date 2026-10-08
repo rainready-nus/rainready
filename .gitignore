@@ -11,9 +11,14 @@ dist/
 coverage/
 .aws-sam/
 samconfig.toml
+backend/data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 
 # Local/editor files
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+

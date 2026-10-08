@@ -4,9 +4,15 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { getWeatherSnapshot } from "./weather-data.mjs";
 import { buildRiskAssessment } from "./risk-assessment.mjs";
+import { createEventStore } from "./event-store.mjs";
+import { createEventService, EventValidationError } from "./event-service.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendPath = path.join(root, "frontend", "index.html");
+const eventStore = createEventStore({
+  databasePath: process.env.RAINREADY_DB_FILE || path.join(root, "backend", "data", "rainready.sqlite"),
+  legacyFilePath: process.env.RAINREADY_LEGACY_DATA_FILE || path.join(root, "backend", "data", "events.json"),
+});
 
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
@@ -25,15 +31,111 @@ function parseCoordinate(value, name, min, max) {
   return number;
 }
 
-export function createServer({ snapshot = getWeatherSnapshot, cache = new Map() } = {}) {
+async function readJsonBody(request) {
+  let body = "";
+  for await (const chunk of request) {
+    body += chunk;
+    if (body.length > 32_768) throw new RangeError("request body must be 32 KB or smaller");
+  }
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new EventValidationError("request body must contain valid JSON");
+  }
+}
+
+export function createServer({ snapshot = getWeatherSnapshot, cache = new Map(), store = eventStore, service } = {}) {
+  const events = service ?? createEventService(store);
   return createHttpServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
     if (request.method === "GET" && url.pathname === "/health") {
       return sendJson(response, 200, {
         status: "ok",
-        version: "0.2.0",
+        version: "0.5.0",
         checkedAt: new Date().toISOString(),
       });
+    }
+
+    if (url.pathname === "/api/events" && request.method === "GET") {
+      try {
+        return sendJson(response, 200, { events: await events.list() });
+      } catch (error) {
+        return sendJson(response, 500, { error: "event_store_error", message: "RainReady could not load saved events.", detail: error.message });
+      }
+    }
+
+    if (url.pathname === "/api/events" && request.method === "POST") {
+      try {
+        const event = await events.create(await readJsonBody(request));
+        return sendJson(response, 201, { event });
+      } catch (error) {
+        const status = error instanceof EventValidationError || error instanceof RangeError ? 400 : 500;
+        return sendJson(response, status, { error: status === 400 ? "invalid_event" : "event_store_error", message: error.message });
+      }
+    }
+
+    const decisionsRoute = url.pathname.match(/^\/api\/events\/([^/]+)\/decisions$/);
+    if (decisionsRoute) {
+      let id;
+      try {
+        id = decodeURIComponent(decisionsRoute[1]);
+      } catch {
+        return sendJson(response, 400, { error: "invalid_event_id" });
+      }
+      if (request.method === "GET") {
+        try {
+          const decisions = await events.listDecisions(id);
+          return decisions ? sendJson(response, 200, { decisions }) : sendJson(response, 404, { error: "event_not_found" });
+        } catch (error) {
+          return sendJson(response, 500, { error: "event_store_error", message: error.message });
+        }
+      }
+      if (request.method === "POST") {
+        try {
+          const result = await events.recordDecision(id, await readJsonBody(request));
+          return result
+            ? sendJson(response, 201, { decision: result.decision, event: result.event })
+            : sendJson(response, 404, { error: "event_not_found" });
+        } catch (error) {
+          const status = error instanceof EventValidationError || error instanceof RangeError ? 400 : 500;
+          return sendJson(response, status, { error: status === 400 ? "invalid_decision" : "event_store_error", message: error.message });
+        }
+      }
+    }
+
+    const eventRoute = url.pathname.match(/^\/api\/events\/([^/]+)$/);
+    if (eventRoute) {
+      let id;
+      try {
+        id = decodeURIComponent(eventRoute[1]);
+      } catch {
+        return sendJson(response, 400, { error: "invalid_event_id" });
+      }
+      if (request.method === "GET") {
+        try {
+          const event = await events.get(id);
+          return event ? sendJson(response, 200, { event }) : sendJson(response, 404, { error: "event_not_found" });
+        } catch (error) {
+          return sendJson(response, 500, { error: "event_store_error", message: error.message });
+        }
+      }
+      if (request.method === "PATCH") {
+        try {
+          const event = await events.update(id, await readJsonBody(request));
+          return event ? sendJson(response, 200, { event }) : sendJson(response, 404, { error: "event_not_found" });
+        } catch (error) {
+          const status = error instanceof EventValidationError || error instanceof RangeError ? 400 : 500;
+          return sendJson(response, status, { error: status === 400 ? "invalid_event" : "event_store_error", message: error.message });
+        }
+      }
+      if (request.method === "DELETE") {
+        try {
+          const deleted = await events.delete(id);
+          return deleted ? sendJson(response, 200, { deleted: true, id }) : sendJson(response, 404, { error: "event_not_found" });
+        } catch (error) {
+          return sendJson(response, 500, { error: "event_store_error", message: error.message });
+        }
+      }
     }
 
     if (request.method === "GET" && url.pathname === "/api/weather") {
@@ -107,3 +209,4 @@ if (isMain) {
     console.log(`RainReady is running at http://127.0.0.1:${port}`);
   });
 }
+
