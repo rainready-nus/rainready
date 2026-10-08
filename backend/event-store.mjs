@@ -43,6 +43,12 @@ function createSchema(db) {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiry ON auth_sessions(expires_at);
+    CREATE TABLE IF NOT EXISTS auth_rate_limits (
+      key_hash TEXT PRIMARY KEY,
+      window_started_at INTEGER NOT NULL,
+      attempts INTEGER NOT NULL,
+      blocked_until INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS organization_invitations (
       token_hash TEXT PRIMARY KEY,
       organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -285,6 +291,60 @@ export function createEventStore({ databasePath, legacyFilePath = null } = {}) {
       db.prepare(`INSERT INTO organization_invitations
         (token_hash, organization_id, created_by_user_id, expires_at, created_at)
         VALUES (?, ?, ?, ?, ?)`).run(tokenHash, organizationId, createdByUserId, expiresAt, now);
+    },
+    listOrganizationMembers(organizationId) {
+      return db.prepare(`SELECT u.id, u.email, m.role, m.created_at AS joined_at
+        FROM organization_memberships m JOIN users u ON u.id = m.user_id
+        WHERE m.organization_id = ? ORDER BY CASE m.role WHEN 'owner' THEN 0 ELSE 1 END, u.email`).all(organizationId);
+    },
+    removeOrganizationMember({ actorUserId, organizationId, targetUserId }) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const actor = db.prepare("SELECT role FROM organization_memberships WHERE user_id = ? AND organization_id = ?")
+          .get(actorUserId, organizationId);
+        const target = db.prepare("SELECT role FROM organization_memberships WHERE user_id = ? AND organization_id = ?")
+          .get(targetUserId, organizationId);
+        if (actor?.role !== "owner" || target?.role !== "member" || actorUserId === targetUserId) {
+          db.exec("ROLLBACK");
+          return false;
+        }
+        db.prepare("DELETE FROM organization_memberships WHERE user_id = ? AND organization_id = ? AND role = 'member'")
+          .run(targetUserId, organizationId);
+        db.prepare("DELETE FROM auth_sessions WHERE user_id = ?").run(targetUserId);
+        const remainingMemberships = db.prepare("SELECT 1 FROM organization_memberships WHERE user_id = ? LIMIT 1").get(targetUserId);
+        if (!remainingMemberships) db.prepare("DELETE FROM users WHERE id = ?").run(targetUserId);
+        db.exec("COMMIT");
+        return true;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    deleteUserSessions(userId) {
+      return db.prepare("DELETE FROM auth_sessions WHERE user_id = ?").run(userId).changes;
+    },
+    consumeRateLimit({ keyHash, now, windowMs, maxAttempts }) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const current = db.prepare("SELECT window_started_at, attempts, blocked_until FROM auth_rate_limits WHERE key_hash = ?").get(keyHash);
+        if (current && current.window_started_at + windowMs > now && current.attempts >= maxAttempts) {
+          db.exec("COMMIT");
+          return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((current.blocked_until - now) / 1000)) };
+        }
+        const windowStartedAt = current && current.window_started_at + windowMs > now ? current.window_started_at : now;
+        const attempts = current && current.window_started_at + windowMs > now ? current.attempts + 1 : 1;
+        const blockedUntil = windowStartedAt + windowMs;
+        db.prepare(`INSERT INTO auth_rate_limits (key_hash, window_started_at, attempts, blocked_until)
+          VALUES (?, ?, ?, ?) ON CONFLICT(key_hash) DO UPDATE SET
+          window_started_at = excluded.window_started_at, attempts = excluded.attempts, blocked_until = excluded.blocked_until`)
+          .run(keyHash, windowStartedAt, attempts, blockedUntil);
+        db.prepare("DELETE FROM auth_rate_limits WHERE blocked_until < ? - 86400000").run(now);
+        db.exec("COMMIT");
+        return { allowed: true, retryAfterSeconds: 0 };
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
     },
   };
 

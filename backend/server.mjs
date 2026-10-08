@@ -7,10 +7,11 @@ import { buildRiskAssessment } from "./risk-assessment.mjs";
 import { createEventStore } from "./event-store.mjs";
 import { createEventService, EventValidationError } from "./event-service.mjs";
 import { searchOneMap, GeocodingConfigurationError, GeocodingUpstreamError } from "./geocoding.mjs";
-import { AuthError, createAuthService, clearedSessionCookie, readSessionCookie, sessionCookie } from "./auth.mjs";
+import { AuthError, createAuthService, clearedSessionCookie, hashToken, readSessionCookie, sessionCookie } from "./auth.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendPath = path.join(root, "frontend", "index.html");
+assertLocalPrototypeSafeEnvironment();
 const eventStore = createEventStore({
   databasePath: process.env.RAINREADY_DB_FILE || path.join(root, "backend", "data", "rainready.sqlite"),
   legacyFilePath: process.env.RAINREADY_LEGACY_DATA_FILE || path.join(root, "backend", "data", "events.json"),
@@ -22,6 +23,12 @@ function sendJson(response, statusCode, body) {
     "cache-control": "no-store",
   });
   response.end(JSON.stringify(body));
+}
+
+export function assertLocalPrototypeSafeEnvironment(environment = process.env) {
+  if (environment.RAINREADY_PUBLIC_DEPLOYMENT === "true") {
+    throw new Error("Public deployment is blocked: local prototype authentication is not approved. Integrate and verify managed identity, production storage, origin/TLS policy, rate limiting and monitoring first.");
+  }
 }
 
 function parseCoordinate(value, name, min, max) {
@@ -47,19 +54,9 @@ async function readJsonBody(request) {
 }
 
 export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchOneMap, cache = new Map(), store = eventStore } = {}) {
+  assertLocalPrototypeSafeEnvironment();
   const auth = createAuthService(store.auth);
-  const rateLimits = new Map();
-  const withinRateLimit = (key, limit, windowMs) => {
-    const now = Date.now();
-    const record = rateLimits.get(key);
-    if (!record || record.resetAt <= now) {
-      rateLimits.set(key, { count: 1, resetAt: now + windowMs });
-      return true;
-    }
-    if (record.count >= limit) return false;
-    record.count += 1;
-    return true;
-  };
+  const allowedOrigins = (process.env.RAINREADY_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
   const currentSession = (request) => auth.resolveSession(readSessionCookie(request));
   const organizationContext = (request, session) => {
     const organizationId = request.headers["x-rainready-organization"];
@@ -72,9 +69,13 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
   };
   const sameOriginMutation = (request) => {
     const origin = request.headers.origin;
-    if (!origin) return true;
+    if (!origin) return process.env.RAINREADY_REQUIRE_ORIGIN !== "true";
     const protocol = request.socket.encrypted ? "https:" : "http:";
-    try { return new URL(origin).origin === new URL(request.url ?? "/", `${protocol}//${request.headers.host}`).origin; }
+    try {
+      const receivedOrigin = new URL(origin).origin;
+      const sameOrigin = receivedOrigin === new URL(request.url ?? "/", `${protocol}//${request.headers.host}`).origin;
+      return sameOrigin && (!allowedOrigins.length || allowedOrigins.includes(receivedOrigin));
+    }
     catch { return false; }
   };
   return createHttpServer(async (request, response) => {
@@ -90,7 +91,11 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
     if (request.method === "POST" && ["/api/auth/register", "/api/auth/login"].includes(url.pathname)) {
       const isRegister = url.pathname.endsWith("register");
       const bucket = `${isRegister ? "register" : "login"}:${request.socket.remoteAddress ?? "local"}`;
-      if (!withinRateLimit(bucket, isRegister ? 5 : 10, 15 * 60 * 1000)) {
+      const limit = store.auth.consumeRateLimit({
+        keyHash: hashToken(bucket), now: Date.now(), windowMs: 15 * 60 * 1000, maxAttempts: isRegister ? 5 : 10,
+      });
+      if (!limit.allowed) {
+        response.setHeader("retry-after", String(limit.retryAfterSeconds));
         return sendJson(response, 429, { error: "auth_rate_limited", message: "Too many authentication attempts. Wait 15 minutes and try again." });
       }
       if (!sameOriginMutation(request)) return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
@@ -117,6 +122,15 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
       return response.end();
     }
 
+    if (url.pathname === "/api/auth/logout-all" && request.method === "POST") {
+      if (!sameOriginMutation(request)) return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
+      const session = currentSession(request);
+      if (!session) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
+      auth.logoutAll(session.user.id);
+      response.writeHead(204, { "set-cookie": clearedSessionCookie(request), "cache-control": "no-store" });
+      return response.end();
+    }
+
     if (url.pathname === "/api/auth/me" && request.method === "GET") {
       const session = currentSession(request);
       if (!session) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
@@ -139,6 +153,38 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
       } catch (error) {
         if (error instanceof AuthError) return sendJson(response, error.status, { error: error.code, message: error.message });
         return sendJson(response, 500, { error: "invitation_error", message: "RainReady could not create an invitation." });
+      }
+    }
+
+    if (url.pathname === "/api/auth/members" && request.method === "GET") {
+      const session = currentSession(request);
+      if (!session) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
+      const context = organizationContext(request, session);
+      if (context.error) return sendJson(response, context.error.status, { error: context.error.code, message: context.error.message });
+      try {
+        return sendJson(response, 200, { members: auth.listMembers({ userId: session.user.id, organizationId: context.organization.id }) });
+      } catch (error) {
+        if (error instanceof AuthError) return sendJson(response, error.status, { error: error.code, message: error.message });
+        return sendJson(response, 500, { error: "member_list_error", message: "RainReady could not load organisation members." });
+      }
+    }
+
+    const memberRoute = url.pathname.match(/^\/api\/auth\/members\/([^/]+)$/);
+    if (memberRoute && request.method === "DELETE") {
+      if (!sameOriginMutation(request)) return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
+      const session = currentSession(request);
+      if (!session) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
+      const context = organizationContext(request, session);
+      if (context.error) return sendJson(response, context.error.status, { error: context.error.code, message: context.error.message });
+      let targetUserId;
+      try { targetUserId = decodeURIComponent(memberRoute[1]); }
+      catch { return sendJson(response, 400, { error: "invalid_member", message: "Select a valid organisation member." }); }
+      try {
+        auth.removeMember({ userId: session.user.id, organizationId: context.organization.id, targetUserId });
+        return sendJson(response, 200, { removed: true, sessionsRevoked: true });
+      } catch (error) {
+        if (error instanceof AuthError) return sendJson(response, error.status, { error: error.code, message: error.message });
+        return sendJson(response, 500, { error: "member_remove_error", message: "RainReady could not remove this member." });
       }
     }
 
