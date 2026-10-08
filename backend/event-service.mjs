@@ -100,20 +100,21 @@ function buildTestNotification(event, { action, reason }, decidedAt) {
   };
 }
 
-export function createEventService(store) {
+export function createEventService(store, { organizationId } = {}) {
   if (!store) throw new TypeError("store is required");
+  if (typeof organizationId !== "string" || !organizationId) throw new TypeError("organizationId is required");
   return {
-    list: () => store.list(),
-    get: (id) => store.get(id),
-    create: (input) => store.create(validateEventInput(input)),
+    list: () => store.list(organizationId),
+    get: (id) => store.get(organizationId, id),
+    create: (input) => store.create(organizationId, validateEventInput(input)),
     async update(id, input) {
-      const current = await store.get(id);
+      const current = await store.get(organizationId, id);
       if (!current) return null;
-      return store.update(id, validateEventInput({ ...current, ...input }));
+      return store.update(organizationId, id, validateEventInput({ ...current, ...input }));
     },
     async recordDecision(id, input) {
       const fields = validateDecisionInput(input);
-      const event = await store.get(id);
+      const event = await store.get(organizationId, id);
       if (!event) return null;
       if (fields.action === "relocate" && !event.backupVenue) {
         throw new EventValidationError("a backup venue must be set before recording a relocation decision");
@@ -126,11 +127,11 @@ export function createEventService(store) {
         decidedAt,
         testNotification: buildTestNotification(event, fields, decidedAt),
       };
-      const updatedEvent = await store.addDecision(id, decision);
+      const updatedEvent = await store.addDecision(organizationId, id, decision);
       return updatedEvent ? { decision, event: updatedEvent } : null;
     },
-    listDecisions: (id) => store.listDecisions(id),
-    delete: (id) => store.delete(id),
+    listDecisions: (id) => store.listDecisions(organizationId, id),
+    delete: (id) => store.delete(organizationId, id),
   };
 }
 

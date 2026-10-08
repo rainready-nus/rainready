@@ -8,14 +8,43 @@ import { createEventStore } from "./event-store.mjs";
 import { GeocodingConfigurationError } from "./geocoding.mjs";
 
 async function withServer(options, run) {
-  const server = createServer(options);
+  const ownsStore = !options.store;
+  const directory = ownsStore ? await mkdtemp(path.join(os.tmpdir(), "rainready-server-test-")) : null;
+  const store = options.store ?? createEventStore({ databasePath: path.join(directory, "events.sqlite"), legacyFilePath: null });
+  const server = createServer({ ...options, store });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   try {
     await run(`http://127.0.0.1:${port}`);
   } finally {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    if (ownsStore) {
+      store.close();
+      await rm(directory, { recursive: true, force: true });
+    }
   }
+}
+
+async function signUp(base, email, organizationName, invitationCode = "") {
+  const response = await fetch(`${base}/api/auth/register`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password: "correct horse battery staple", organizationName, invitationCode }),
+  });
+  const body = await response.json();
+  assert.equal(response.status, 201, JSON.stringify(body));
+  return { cookie: response.headers.get("set-cookie").split(";")[0], user: body.user, organization: body.organizations[0] };
+}
+
+function apiFetch(base, client, path, options = {}, organizationId = client.organization.id) {
+  return fetch(`${base}${path}`, {
+    ...options,
+    headers: {
+      ...(options.headers ?? {}),
+      cookie: client.cookie,
+      "x-rainready-organization": organizationId,
+    },
+  });
 }
 
 test("health endpoint returns service status", async () => {
@@ -28,6 +57,84 @@ test("health endpoint returns service status", async () => {
   });
 });
 
+test("authentication issues HttpOnly sessions, invites members, and logs out", async () => {
+  await withServer({}, async (base) => {
+    const privateResponse = await fetch(`${base}/api/events`);
+    assert.equal(privateResponse.status, 401);
+
+    const owner = await signUp(base, "owner@example.com", "RainReady Club");
+    assert.match(owner.cookie, /^rainready_session=/);
+    const session = await fetch(`${base}/api/auth/me`, { headers: { cookie: owner.cookie } });
+    assert.equal(session.status, 200);
+    assert.equal((await session.json()).organizations[0].role, "owner");
+
+    const invitationResponse = await apiFetch(base, owner, "/api/auth/invitations", { method: "POST", body: "{}" });
+    assert.equal(invitationResponse.status, 201);
+    const invitation = await invitationResponse.json();
+    assert.ok(invitation.code);
+    assert.equal(invitation.organizationName, "RainReady Club");
+
+    const member = await signUp(base, "member@example.com", "", invitation.code);
+    assert.equal(member.organization.id, owner.organization.id);
+    assert.equal(member.organization.role, "member");
+    const deniedInvite = await apiFetch(base, member, "/api/auth/invitations", { method: "POST", body: "{}" });
+    assert.equal(deniedInvite.status, 403);
+
+    const wrongPassword = await fetch(`${base}/api/auth/login`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "owner@example.com", password: "wrong password" }),
+    });
+    assert.equal(wrongPassword.status, 401);
+    const login = await fetch(`${base}/api/auth/login`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "OWNER@example.com", password: "correct horse battery staple" }),
+    });
+    assert.equal(login.status, 200);
+    assert.match(login.headers.get("set-cookie"), /HttpOnly; SameSite=Strict/);
+
+    const logout = await apiFetch(base, owner, "/api/auth/logout", { method: "POST", body: "{}" });
+    assert.equal(logout.status, 204);
+    const expired = await fetch(`${base}/api/auth/me`, { headers: { cookie: owner.cookie } });
+    assert.equal(expired.status, 401);
+  });
+});
+
+test("organisation membership scopes event list, retrieval, updates and decisions", async () => {
+  await withServer({}, async (base) => {
+    const alpha = await signUp(base, "alpha@example.com", "Alpha Club");
+    const beta = await signUp(base, "beta@example.com", "Beta Club");
+    const payload = {
+      name: "Alpha-only event", venue: "University Town", latitude: 1.304, longitude: 103.773,
+      backupVenue: { name: "Sports Hall", latitude: 1.296, longitude: 103.78 }, participantCount: 12,
+      date: "2026-11-18", time: "16:00", type: "Sports", sensitivity: "medium",
+    };
+    const created = await apiFetch(base, alpha, "/api/events", { method: "POST", body: JSON.stringify(payload) });
+    assert.equal(created.status, 201);
+    const event = (await created.json()).event;
+
+    assert.deepEqual((await (await apiFetch(base, beta, "/api/events")).json()).events, []);
+    assert.equal((await apiFetch(base, beta, `/api/events/${event.id}`)).status, 404);
+    assert.equal((await apiFetch(base, beta, `/api/events/${event.id}`, { method: "PATCH", body: JSON.stringify({ participantCount: 999 }) })).status, 404);
+    assert.equal((await apiFetch(base, beta, `/api/events/${event.id}/decisions`)).status, 404);
+    assert.equal((await apiFetch(base, beta, `/api/events/${event.id}`, { method: "DELETE" })).status, 404);
+    assert.equal((await apiFetch(base, beta, "/api/events", {}, alpha.organization.id)).status, 403);
+    assert.equal((await apiFetch(base, alpha, "/api/events", {}, "")).status, 400);
+  });
+});
+
+test("state-changing requests reject a foreign browser origin", async () => {
+  await withServer({}, async (base) => {
+    const client = await signUp(base, "origin@example.com", "Origin Club");
+    const response = await apiFetch(base, client, "/api/events", {
+      method: "POST",
+      headers: { origin: "https://attacker.example", "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error, "cross_origin_request");
+  });
+});
+
 test("geocode endpoint validates search text and returns selectable locations", async () => {
   let received;
   const geocoder = async ({ query }) => {
@@ -35,9 +142,10 @@ test("geocode endpoint validates search text and returns selectable locations", 
     return [{ name: "UNIVERSITY TOWN", address: "NUS, 2 COLLEGE AVENUE WEST", latitude: 1.304, longitude: 103.773 }];
   };
   await withServer({ geocoder }, async (base) => {
-    const invalid = await fetch(`${base}/api/geocode?query=UT`);
+    const client = await signUp(base, "organizer@example.com", "Test Club");
+    const invalid = await apiFetch(base, client, "/api/geocode?query=UT");
     assert.equal(invalid.status, 400);
-    const response = await fetch(`${base}/api/geocode?query=${encodeURIComponent(" University Town ")}`);
+    const response = await apiFetch(base, client, `/api/geocode?query=${encodeURIComponent(" University Town ")}`);
     assert.equal(response.status, 200);
     assert.equal(received, "University Town");
     assert.deepEqual(await response.json(), {
@@ -49,7 +157,8 @@ test("geocode endpoint validates search text and returns selectable locations", 
 
 test("geocode endpoint explains when OneMap credentials are not configured", async () => {
   await withServer({ geocoder: async () => { throw new GeocodingConfigurationError(); } }, async (base) => {
-    const response = await fetch(`${base}/api/geocode?query=${encodeURIComponent("NUS Kent Ridge")}`);
+    const client = await signUp(base, "organizer@example.com", "Test Club");
+    const response = await apiFetch(base, client, `/api/geocode?query=${encodeURIComponent("NUS Kent Ridge")}`);
     assert.equal(response.status, 503);
     const body = await response.json();
     assert.equal(body.error, "geocoding_not_configured");
@@ -64,9 +173,10 @@ test("weather endpoint validates coordinates and returns snapshot", async () => 
     return { location: { latitude: input.latitude, longitude: input.longitude }, sources: {} };
   };
   await withServer({ snapshot }, async (base) => {
-    const invalid = await fetch(`${base}/api/weather?latitude=abc&longitude=103.8`);
+    const client = await signUp(base, "organizer@example.com", "Test Club");
+    const invalid = await apiFetch(base, client, "/api/weather?latitude=abc&longitude=103.8");
     assert.equal(invalid.status, 400);
-    const response = await fetch(`${base}/api/weather?latitude=1.3&longitude=103.8`);
+    const response = await apiFetch(base, client, "/api/weather?latitude=1.3&longitude=103.8");
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { location: { latitude: 1.3, longitude: 103.8 }, sources: {} });
     assert.equal(received.latitude, 1.3);
@@ -86,9 +196,10 @@ test("assessment endpoint combines source snapshot with requested sensitivity", 
     },
   });
   await withServer({ snapshot }, async (base) => {
-    const invalid = await fetch(`${base}/api/assessment?latitude=1.3&longitude=103.8&sensitivity=extreme`);
+    const client = await signUp(base, "organizer@example.com", "Test Club");
+    const invalid = await apiFetch(base, client, "/api/assessment?latitude=1.3&longitude=103.8&sensitivity=extreme");
     assert.equal(invalid.status, 400);
-    const response = await fetch(`${base}/api/assessment?latitude=1.3&longitude=103.8&sensitivity=medium`);
+    const response = await apiFetch(base, client, "/api/assessment?latitude=1.3&longitude=103.8&sensitivity=medium");
     const body = await response.json();
     assert.equal(response.status, 200);
     assert.equal(body.assessment.status, "current");
@@ -110,6 +221,7 @@ test("event API creates, lists, updates, and deletes an event with persisted dat
   const store = createEventStore({ databasePath: path.join(directory, "events.sqlite"), legacyFilePath: null });
   try {
     await withServer({ store }, async (base) => {
+      const client = await signUp(base, "organizer@example.com", "Test Club");
       const payload = {
         name: "Campus Sports Day",
         venue: "University Town Green",
@@ -123,7 +235,7 @@ test("event API creates, lists, updates, and deletes an event with persisted dat
         type: "Sports",
         sensitivity: "high",
       };
-      const createdResponse = await fetch(`${base}/api/events`, {
+      const createdResponse = await apiFetch(base, client, "/api/events", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
@@ -133,25 +245,25 @@ test("event API creates, lists, updates, and deletes an event with persisted dat
       assert.equal(event.backupVenue.name, "Sports Hall");
       assert.equal(event.participantCount, 120);
 
-      const list = await fetch(`${base}/api/events`);
+      const list = await apiFetch(base, client, "/api/events");
       assert.deepEqual((await list.json()).events.map((item) => item.id), [event.id]);
-      const updated = await fetch(`${base}/api/events/${event.id}`, {
+      const updated = await apiFetch(base, client, `/api/events/${event.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ participantCount: 140 }),
       });
       assert.equal((await updated.json()).event.participantCount, 140);
 
-      const invalid = await fetch(`${base}/api/events`, {
+      const invalid = await apiFetch(base, client, "/api/events", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...payload, longitude: 200 }),
       });
       assert.equal(invalid.status, 400);
 
-      const deleted = await fetch(`${base}/api/events/${event.id}`, { method: "DELETE" });
+      const deleted = await apiFetch(base, client, `/api/events/${event.id}`, { method: "DELETE" });
       assert.equal(deleted.status, 200);
-      assert.deepEqual((await (await fetch(`${base}/api/events`)).json()).events, []);
+      assert.deepEqual((await (await apiFetch(base, client, "/api/events")).json()).events, []);
     });
   } finally {
     store.close();
@@ -164,7 +276,8 @@ test("decision API stores the organiser reason and returns a preview that was no
   const store = createEventStore({ databasePath: path.join(directory, "events.sqlite"), legacyFilePath: null });
   try {
     await withServer({ store }, async (base) => {
-      const create = await fetch(`${base}/api/events`, {
+      const client = await signUp(base, "organizer@example.com", "Test Club");
+      const create = await apiFetch(base, client, "/api/events", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -174,13 +287,13 @@ test("decision API stores the organiser reason and returns a preview that was no
         }),
       });
       const { event } = await create.json();
-      const invalid = await fetch(`${base}/api/events/${event.id}/decisions`, {
+      const invalid = await apiFetch(base, client, `/api/events/${event.id}/decisions`, {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "cancel", reason: " " }),
       });
       assert.equal(invalid.status, 400);
 
-      const response = await fetch(`${base}/api/events/${event.id}/decisions`, {
+      const response = await apiFetch(base, client, `/api/events/${event.id}/decisions`, {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "relocate", reason: "Heavy showers near the venue." }),
       });
@@ -191,7 +304,7 @@ test("decision API stores the organiser reason and returns a preview that was no
       assert.match(body.decision.testNotification.message, /Test hall/);
       assert.equal(body.event.decisions.length, 1);
 
-      const history = await fetch(`${base}/api/events/${event.id}/decisions`);
+      const history = await apiFetch(base, client, `/api/events/${event.id}/decisions`);
       assert.deepEqual((await history.json()).decisions, [body.decision]);
     });
   } finally {

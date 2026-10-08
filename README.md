@@ -10,12 +10,14 @@ The prototype supports:
 
 - creating, viewing, editing and deleting events, including main/backup venue coordinates, date/time, activity sensitivity and participant count;
 - persistent SQLite storage for events, organiser decisions and test-notification previews;
+- email/password sign-in, organisation workspaces, and owner-generated one-time invitations for teammates;
+- server-enforced organisation isolation for event lists, details, edits, decisions, deletes, weather checks and location search;
 - recording a decision (continue, prepare, relocate, postpone or cancel), required reason and timestamp;
 - generating a test-only notification preview marked `not_sent`—no email/SMS/push message is sent and no participant contact details are collected;
 - retrieving current weather source readings, displaying freshness and explaining the risk assessment.
 - searching OneMap by Singapore place name/address, reviewing matching addresses and confirming a result before saving its coordinates.
 
-**Safety and scope:** risk mappings and bands are experimental RainReady assumptions, not official NEA thresholds or a safety guarantee. Historical probability is excluded. Lightning observations are not an official warning or all-clear; the separate alert simulation is not connected to NEA. Organisers remain responsible for decisions, and the system never auto-resumes an activity. OneMap search is an address-to-coordinate lookup only; organisers must verify the selected result. Authentication, real notifications and AWS deployment are not implemented yet.
+**Safety and scope:** risk mappings and bands are experimental RainReady assumptions, not official NEA thresholds or a safety guarantee. Historical probability is excluded. Lightning observations are not an official warning or all-clear; the separate alert simulation is not connected to NEA. Organisers remain responsible for decisions, and the system never auto-resumes an activity. OneMap search is an address-to-coordinate lookup only; organisers must verify the selected result. Authentication is a local course-prototype implementation, not production-hardened identity infrastructure; do not expose it publicly or deploy it to AWS. AWS Cognito, production account recovery, verified email/MFA, monitoring and security review are not implemented.
 
 ## Run locally
 
@@ -26,17 +28,17 @@ npm start
 npm test
 ```
 
-Open `http://127.0.0.1:8787`. The API binds to loopback for local development. To enable address search, copy `.env.example` to `.env`, add your OneMap access token as `ONEMAP_ACCESS_TOKEN`, then run `npm start`; Node loads the local `.env` file. Register/sign in at [OneMap API](https://www.onemap.gov.sg/apidocs/) to obtain a token. OneMap documents a three-day token lifetime, so replace it after expiry; keep it only in the ignored local `.env` or a managed secret store, never in frontend code or GitHub. Without a token, event weather functions still work for saved locations, but new address searches return a clear setup message. Do not add actual credentials to `.env.example`.
+Open `http://127.0.0.1:8787`. The API binds to loopback for local development. On first launch, choose **Create account** and create a workspace; account passwords must be at least 12 characters. The workspace owner can select **Invite member** and privately share the one-time invitation code with teammates; members join through **Create account** using that code. Accounts and sessions are stored in the local ignored SQLite database. To enable address search, copy `.env.example` to `.env`, add your OneMap access token as `ONEMAP_ACCESS_TOKEN`, then run `npm start`; Node loads the local `.env` file. Register/sign in at [OneMap API](https://www.onemap.gov.sg/apidocs/) to obtain a token. OneMap documents a three-day token lifetime, so replace it after expiry; keep it only in the ignored local `.env` or a managed secret store, never in frontend code or GitHub. Without a token, event weather functions still work for saved locations, but new address searches return a clear setup message. Do not add actual credentials to `.env.example`.
 
 ## Local data and migration
 
-The default database is `backend/data/rainready.sqlite` and is ignored by Git. On first start, the backend imports `backend/data/events.json` if it exists, records that the one-time import has completed, and leaves the JSON file untouched as a recovery copy. Set `RAINREADY_DB_FILE` and optionally `RAINREADY_LEGACY_DATA_FILE` to use other local paths. Back up the SQLite file before deleting or replacing local data.
+The default database is `backend/data/rainready.sqlite` and is ignored by Git. It stores local accounts, hashed sessions, organisation memberships, invitations, events, decisions and notification previews. Every event row has an organisation ID; the backend verifies membership on each request before returning or changing it. On first start, the backend imports `backend/data/events.json` if it exists, records that the one-time import has completed, and leaves the JSON file untouched as a recovery copy. The first registered workspace takes ownership of imported legacy events. Set `RAINREADY_DB_FILE` and optionally `RAINREADY_LEGACY_DATA_FILE` to use other local paths. Back up the SQLite file before deleting or replacing local data.
 
 SQLite here is for a single-machine prototype, not a hardened production database. It is not automatically encrypted or backed up. The app stores a participant **count only**, not names, emails, phone numbers or other participant personal data.
 
 ## Cloud deployment direction (not implemented)
 
-The local app/database are not yet deployed. A likely AWS prototype architecture is a static frontend on S3 + CloudFront, an API on API Gateway + Lambda, and managed application storage on Amazon RDS for PostgreSQL. Scheduled ingestion/monitoring can be evaluated with EventBridge and CloudWatch. This is a future migration plan—not a claim that AWS resources or cloud persistence are already running. Confirm course-account permissions, quotas and cost before provisioning.
+The local app/database are not deployed. A likely AWS prototype architecture is a static frontend on S3 + CloudFront, an API on API Gateway + Lambda, and managed application storage on Amazon RDS for PostgreSQL. Production identity should move to Amazon Cognito (or another reviewed identity provider), with backend verification and server-side organisation membership checks. Scheduled ingestion/monitoring can be evaluated with EventBridge and CloudWatch. This is a future migration plan—not a claim that AWS resources or cloud persistence are already running. Confirm course-account permissions, quotas and cost before provisioning. The current local password/session implementation is not approved for public or AWS exposure.
 
 Credential handling when deployment begins:
 
@@ -48,5 +50,5 @@ Credential handling when deployment begins:
 
 ## Team workflow and status
 
-Use short feature branches and Pull Requests; keep `main` runnable. Discuss API changes in [`docs/api-contract.md`](docs/api-contract.md) before frontend/backend work diverges. Event CRUD, SQLite local persistence, decisions, test previews and OneMap venue search are implemented locally. Cloud database migration, authentication, live notification delivery, full evaluation and AWS deployment remain future work.
+Use short feature branches and Pull Requests; keep `main` runnable. Discuss API changes in [`docs/api-contract.md`](docs/api-contract.md) before frontend/backend work diverges. Event CRUD, SQLite local persistence, local login/organisation isolation, decisions, test previews and OneMap venue search are implemented. Cloud database migration, production identity integration, live notification delivery, full evaluation and AWS deployment remain future work.
 

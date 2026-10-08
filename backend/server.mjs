@@ -7,6 +7,7 @@ import { buildRiskAssessment } from "./risk-assessment.mjs";
 import { createEventStore } from "./event-store.mjs";
 import { createEventService, EventValidationError } from "./event-service.mjs";
 import { searchOneMap, GeocodingConfigurationError, GeocodingUpstreamError } from "./geocoding.mjs";
+import { AuthError, createAuthService, clearedSessionCookie, readSessionCookie, sessionCookie } from "./auth.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendPath = path.join(root, "frontend", "index.html");
@@ -45,8 +46,37 @@ async function readJsonBody(request) {
   }
 }
 
-export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchOneMap, cache = new Map(), store = eventStore, service } = {}) {
-  const events = service ?? createEventService(store);
+export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchOneMap, cache = new Map(), store = eventStore } = {}) {
+  const auth = createAuthService(store.auth);
+  const rateLimits = new Map();
+  const withinRateLimit = (key, limit, windowMs) => {
+    const now = Date.now();
+    const record = rateLimits.get(key);
+    if (!record || record.resetAt <= now) {
+      rateLimits.set(key, { count: 1, resetAt: now + windowMs });
+      return true;
+    }
+    if (record.count >= limit) return false;
+    record.count += 1;
+    return true;
+  };
+  const currentSession = (request) => auth.resolveSession(readSessionCookie(request));
+  const organizationContext = (request, session) => {
+    const organizationId = request.headers["x-rainready-organization"];
+    if (typeof organizationId !== "string" || !organizationId) {
+      return { error: new AuthError(400, "organization_required", "Select an organization before using RainReady.") };
+    }
+    const organization = auth.membership(session.user.id, organizationId);
+    if (!organization) return { error: new AuthError(403, "organization_access_denied", "You are not a member of this organization.") };
+    return { organization };
+  };
+  const sameOriginMutation = (request) => {
+    const origin = request.headers.origin;
+    if (!origin) return true;
+    const protocol = request.socket.encrypted ? "https:" : "http:";
+    try { return new URL(origin).origin === new URL(request.url ?? "/", `${protocol}//${request.headers.host}`).origin; }
+    catch { return false; }
+  };
   return createHttpServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
     if (request.method === "GET" && url.pathname === "/health") {
@@ -56,6 +86,75 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
         checkedAt: new Date().toISOString(),
       });
     }
+
+    if (request.method === "POST" && ["/api/auth/register", "/api/auth/login"].includes(url.pathname)) {
+      const isRegister = url.pathname.endsWith("register");
+      const bucket = `${isRegister ? "register" : "login"}:${request.socket.remoteAddress ?? "local"}`;
+      if (!withinRateLimit(bucket, isRegister ? 5 : 10, 15 * 60 * 1000)) {
+        return sendJson(response, 429, { error: "auth_rate_limited", message: "Too many authentication attempts. Wait 15 minutes and try again." });
+      }
+      if (!sameOriginMutation(request)) return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
+      try {
+        const body = await readJsonBody(request);
+        const result = isRegister ? auth.register(body) : auth.login(body);
+        response.setHeader("set-cookie", sessionCookie(result.session.token, request));
+        return sendJson(response, isRegister ? 201 : 200, {
+          user: result.user,
+          organizations: result.organizations,
+          expiresAt: result.session.expiresAt,
+        });
+      } catch (error) {
+        if (error instanceof AuthError) return sendJson(response, error.status, { error: error.code, message: error.message });
+        if (error instanceof EventValidationError || error instanceof RangeError) return sendJson(response, 400, { error: "invalid_auth_request", message: error.message });
+        return sendJson(response, 500, { error: "auth_error", message: "RainReady could not complete the authentication request." });
+      }
+    }
+
+    if (url.pathname === "/api/auth/logout" && request.method === "POST") {
+      if (!sameOriginMutation(request)) return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
+      auth.logout(readSessionCookie(request));
+      response.writeHead(204, { "set-cookie": clearedSessionCookie(request), "cache-control": "no-store" });
+      return response.end();
+    }
+
+    if (url.pathname === "/api/auth/me" && request.method === "GET") {
+      const session = currentSession(request);
+      if (!session) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
+      return sendJson(response, 200, {
+        user: session.user,
+        organizations: store.auth.listMemberships(session.user.id),
+        expiresAt: session.expiresAt,
+      });
+    }
+
+    if (url.pathname === "/api/auth/invitations" && request.method === "POST") {
+      if (!sameOriginMutation(request)) return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
+      const session = currentSession(request);
+      if (!session) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
+      const context = organizationContext(request, session);
+      if (context.error) return sendJson(response, context.error.status, { error: context.error.code, message: context.error.message });
+      try {
+        const invitation = auth.createInvitation({ userId: session.user.id, organizationId: context.organization.id });
+        return sendJson(response, 201, invitation);
+      } catch (error) {
+        if (error instanceof AuthError) return sendJson(response, error.status, { error: error.code, message: error.message });
+        return sendJson(response, 500, { error: "invitation_error", message: "RainReady could not create an invitation." });
+      }
+    }
+
+    let session = null;
+    let activeOrganization = null;
+    if (url.pathname.startsWith("/api/")) {
+      session = currentSession(request);
+      if (!session) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
+      const context = organizationContext(request, session);
+      if (context.error) return sendJson(response, context.error.status, { error: context.error.code, message: context.error.message });
+      activeOrganization = context.organization;
+      if (["POST", "PATCH", "PUT", "DELETE"].includes(request.method ?? "") && !sameOriginMutation(request)) {
+        return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
+      }
+    }
+    const events = activeOrganization ? createEventService(store, { organizationId: activeOrganization.id }) : null;
 
     if (request.method === "GET" && url.pathname === "/api/geocode") {
       const query = (url.searchParams.get("query") ?? "").trim();

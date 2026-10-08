@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { createEventStore } from "./event-store.mjs";
 import { createEventService, EventValidationError } from "./event-service.mjs";
 
@@ -19,6 +20,7 @@ const sample = {
   type: "Sports",
   sensitivity: "high",
 };
+const organizationId = "legacy";
 
 async function withStore(run) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "rainready-events-"));
@@ -34,22 +36,22 @@ async function withStore(run) {
 
 test("persists complete event data and reloads it from a fresh SQLite connection", async () => {
   await withStore(async (store, databasePath) => {
-    const event = await createEventService(store).create(sample);
+    const event = await createEventService(store, { organizationId }).create(sample);
     assert.equal(event.name, sample.name);
     assert.equal(event.backupVenue.name, "Sports Hall");
     assert.equal(event.participantCount, 120);
     store.close();
     const reloaded = createEventStore({ databasePath, legacyFilePath: null });
     try {
-      assert.deepEqual(await reloaded.get(event.id), event);
-      assert.equal((await reloaded.list()).length, 1);
+      assert.deepEqual(await reloaded.get(organizationId, event.id), event);
+      assert.equal((await reloaded.list(organizationId)).length, 1);
     } finally { reloaded.close(); }
   });
 });
 
 test("serialises concurrent writes without losing events", async () => {
   await withStore(async (store) => {
-    const service = createEventService(store);
+    const service = createEventService(store, { organizationId });
     const created = await Promise.all(Array.from({ length: 6 }, (_, index) => service.create({ ...sample, name: `Event ${index}` })));
     assert.equal((await service.list()).length, 6);
     assert.equal(new Set(created.map((event) => event.id)).size, 6);
@@ -58,7 +60,7 @@ test("serialises concurrent writes without losing events", async () => {
 
 test("validates coordinates, participant count, sensitivity, and paired backup coordinates", async () => {
   await withStore(async (store) => {
-    const service = createEventService(store);
+    const service = createEventService(store, { organizationId });
     assert.throws(() => service.create({ ...sample, latitude: "" }), EventValidationError);
     assert.throws(() => service.create({ ...sample, latitude: 120 }), EventValidationError);
     assert.throws(() => service.create({ ...sample, participantCount: 2.5 }), EventValidationError);
@@ -71,7 +73,7 @@ test("validates coordinates, participant count, sensitivity, and paired backup c
 
 test("updates and deletes persisted events", async () => {
   await withStore(async (store) => {
-    const service = createEventService(store);
+    const service = createEventService(store, { organizationId });
     const event = await service.create(sample);
     const updated = await service.update(event.id, { participantCount: 140, backupVenue: null });
     assert.equal(updated.participantCount, 140);
@@ -85,7 +87,7 @@ test("updates and deletes persisted events", async () => {
 
 test("records a timestamped decision and test preview and reloads them from SQLite", async () => {
   await withStore(async (store, databasePath) => {
-    const service = createEventService(store);
+    const service = createEventService(store, { organizationId });
     const event = await service.create(sample);
     const result = await service.recordDecision(event.id, { action: "relocate", reason: "Heavy showers are forecast." });
     assert.equal(result.decision.action, "relocate");
@@ -98,15 +100,15 @@ test("records a timestamped decision and test preview and reloads them from SQLi
     store.close();
     const reloaded = createEventStore({ databasePath, legacyFilePath: null });
     try {
-      assert.deepEqual(await reloaded.listDecisions(event.id), [result.decision]);
-      assert.deepEqual((await reloaded.get(event.id)).decisions, [result.decision]);
+      assert.deepEqual(await reloaded.listDecisions(organizationId, event.id), [result.decision]);
+      assert.deepEqual((await reloaded.get(organizationId, event.id)).decisions, [result.decision]);
     } finally { reloaded.close(); }
   });
 });
 
 test("rejects invalid actions, blank reasons, and relocation without a backup venue", async () => {
   await withStore(async (store) => {
-    const service = createEventService(store);
+    const service = createEventService(store, { organizationId });
     const event = await service.create(sample);
     await assert.rejects(service.recordDecision(event.id, { action: "maybe", reason: "Because" }), EventValidationError);
     await assert.rejects(service.recordDecision(event.id, { action: "cancel", reason: "  " }), EventValidationError);
@@ -125,12 +127,66 @@ test("imports legacy JSON once and leaves the source file intact", async () => {
     await writeFile(legacyFilePath, JSON.stringify([legacyEvent]));
     const imported = createEventStore({ databasePath, legacyFilePath });
     try {
-      assert.equal((await imported.list()).length, 1);
-      assert.equal((await imported.get(legacyEvent.id)).name, sample.name);
+      assert.equal((await imported.list(organizationId)).length, 1);
+      assert.equal((await imported.get(organizationId, legacyEvent.id)).name, sample.name);
     } finally { imported.close(); }
     const reopened = createEventStore({ databasePath, legacyFilePath });
-    try { assert.equal((await reopened.list()).length, 1); } finally { reopened.close(); }
+    try { assert.equal((await reopened.list(organizationId)).length, 1); } finally { reopened.close(); }
     assert.deepEqual(JSON.parse(await (await import("node:fs/promises")).readFile(legacyFilePath, "utf8")), [legacyEvent]);
   });
+});
+
+test("first registered organisation takes ownership of imported legacy events", async () => {
+  await withStore(async (_store, databasePath, directory) => {
+    const legacyFilePath = path.join(directory, "events.json");
+    const legacyEvent = {
+      id: "pre-auth-event", ...sample, createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z", decisions: [],
+    };
+    await writeFile(legacyFilePath, JSON.stringify([legacyEvent]));
+    const store = createEventStore({ databasePath, legacyFilePath });
+    try {
+      store.auth.createAccount({
+        userId: "first-user", email: "first@example.com", passwordHash: "test-hash",
+        organizationId: "first-org", organizationName: "First Club", invitationTokenHash: null,
+        now: new Date().toISOString(),
+      });
+      assert.equal((await store.list("first-org")).length, 1);
+      assert.equal(await store.get("legacy", "pre-auth-event"), null);
+    } finally { store.close(); }
+  });
+});
+
+test("adds organisation scoping to an existing pre-auth SQLite database", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "rainready-old-db-"));
+  const databasePath = path.join(directory, "events.sqlite");
+  try {
+    const oldDb = new DatabaseSync(databasePath);
+    oldDb.exec(`CREATE TABLE events (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, venue TEXT NOT NULL, venue_address TEXT NOT NULL DEFAULT '',
+      latitude REAL NOT NULL, longitude REAL NOT NULL, backup_venue_name TEXT, backup_venue_address TEXT,
+      backup_venue_latitude REAL, backup_venue_longitude REAL, participant_count INTEGER NOT NULL DEFAULT 0,
+      event_date TEXT NOT NULL, event_time TEXT NOT NULL, event_type TEXT NOT NULL, sensitivity TEXT NOT NULL,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    )`);
+    oldDb.prepare(`INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run("before-auth", sample.name, sample.venue, sample.venueAddress, sample.latitude, sample.longitude,
+        sample.backupVenue.name, sample.backupVenue.address, sample.backupVenue.latitude, sample.backupVenue.longitude,
+        sample.participantCount, sample.date, sample.time, sample.type, sample.sensitivity,
+        "2026-10-01T00:00:00.000Z", "2026-10-01T00:00:00.000Z");
+    oldDb.close();
+
+    const migrated = createEventStore({ databasePath, legacyFilePath: null });
+    try {
+      assert.equal((await migrated.get("legacy", "before-auth")).name, sample.name);
+      migrated.auth.createAccount({
+        userId: "migrated-user", email: "migrated@example.com", passwordHash: "test-hash",
+        organizationId: "migrated-org", organizationName: "Migrated Club", invitationTokenHash: null,
+        now: new Date().toISOString(),
+      });
+      assert.equal((await migrated.get("legacy", "before-auth")), null);
+      assert.equal((await migrated.get("migrated-org", "before-auth")).name, sample.name);
+    } finally { migrated.close(); }
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
