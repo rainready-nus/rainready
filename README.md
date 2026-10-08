@@ -4,7 +4,7 @@ RainReady is a course-project cloud-service prototype for helping organisers mon
 
 ## Current prototype
 
-The browser interface calls a local Node.js backend. The backend retrieves NEA forecast, rainfall and lightning-observation data and calculates an explainable prototype assessment for an event's coordinates and sensitivity. Historical probability is excluded until validated.
+The browser interface calls a local Node.js backend. The backend retrieves NEA forecast, rainfall and lightning-observation data and calculates an explainable prototype assessment for an event's coordinates and sensitivity. OneMap address search lets organisers find and explicitly select main and backup venue locations; coordinates are returned and stored by the backend flow, not typed by the organiser. Historical probability is excluded until validated.
 
 The prototype supports:
 
@@ -13,8 +13,9 @@ The prototype supports:
 - recording a decision (continue, prepare, relocate, postpone or cancel), required reason and timestamp;
 - generating a test-only notification preview marked `not_sent`—no email/SMS/push message is sent and no participant contact details are collected;
 - retrieving current weather source readings, displaying freshness and explaining the risk assessment.
+- searching OneMap by Singapore place name/address, reviewing matching addresses and confirming a result before saving its coordinates.
 
-**Safety and scope:** risk mappings and bands are experimental RainReady assumptions, not official NEA thresholds or a safety guarantee. Historical probability is excluded. Lightning observations are not an official warning or all-clear; the separate alert simulation is not connected to NEA. Organisers remain responsible for decisions, and the system never auto-resumes an activity. OneMap geocoding, authentication, real notifications and AWS deployment are not implemented yet.
+**Safety and scope:** risk mappings and bands are experimental RainReady assumptions, not official NEA thresholds or a safety guarantee. Historical probability is excluded. Lightning observations are not an official warning or all-clear; the separate alert simulation is not connected to NEA. Organisers remain responsible for decisions, and the system never auto-resumes an activity. OneMap search is an address-to-coordinate lookup only; organisers must verify the selected result. Authentication, real notifications and AWS deployment are not implemented yet.
 
 ## Run locally
 
@@ -25,7 +26,7 @@ npm start
 npm test
 ```
 
-Open `http://127.0.0.1:8787`. The API binds to loopback for local development. Configuration defaults are in `.env.example`; Node does not automatically load `.env`, so set environment variables in your shell or use your team's approved local environment loader. Do not add actual credentials to `.env.example`.
+Open `http://127.0.0.1:8787`. The API binds to loopback for local development. To enable address search, copy `.env.example` to `.env`, add your OneMap access token as `ONEMAP_ACCESS_TOKEN`, then run `npm start`; Node loads the local `.env` file. Register/sign in at [OneMap API](https://www.onemap.gov.sg/apidocs/) to obtain a token. OneMap documents a three-day token lifetime, so replace it after expiry; keep it only in the ignored local `.env` or a managed secret store, never in frontend code or GitHub. Without a token, event weather functions still work for saved locations, but new address searches return a clear setup message. Do not add actual credentials to `.env.example`.
 
 ## Local data and migration
 
@@ -47,5 +48,5 @@ Credential handling when deployment begins:
 
 ## Team workflow and status
 
-Use short feature branches and Pull Requests; keep `main` runnable. Discuss API changes in [`docs/api-contract.md`](docs/api-contract.md) before frontend/backend work diverges. Event CRUD, SQLite local persistence, decisions and test previews are implemented locally. Cloud database migration, authentication, OneMap geocoding, live notification delivery, full evaluation and AWS deployment remain future work.
+Use short feature branches and Pull Requests; keep `main` runnable. Discuss API changes in [`docs/api-contract.md`](docs/api-contract.md) before frontend/backend work diverges. Event CRUD, SQLite local persistence, decisions, test previews and OneMap venue search are implemented locally. Cloud database migration, authentication, live notification delivery, full evaluation and AWS deployment remain future work.
 

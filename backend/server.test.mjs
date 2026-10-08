@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createServer } from "./server.mjs";
 import { createEventStore } from "./event-store.mjs";
+import { GeocodingConfigurationError } from "./geocoding.mjs";
 
 async function withServer(options, run) {
   const server = createServer(options);
@@ -24,6 +25,35 @@ test("health endpoint returns service status", async () => {
     const body = await response.json();
     assert.equal(body.status, "ok");
     assert.equal(body.version, "0.5.0");
+  });
+});
+
+test("geocode endpoint validates search text and returns selectable locations", async () => {
+  let received;
+  const geocoder = async ({ query }) => {
+    received = query;
+    return [{ name: "UNIVERSITY TOWN", address: "NUS, 2 COLLEGE AVENUE WEST", latitude: 1.304, longitude: 103.773 }];
+  };
+  await withServer({ geocoder }, async (base) => {
+    const invalid = await fetch(`${base}/api/geocode?query=UT`);
+    assert.equal(invalid.status, 400);
+    const response = await fetch(`${base}/api/geocode?query=${encodeURIComponent(" University Town ")}`);
+    assert.equal(response.status, 200);
+    assert.equal(received, "University Town");
+    assert.deepEqual(await response.json(), {
+      query: "University Town",
+      results: [{ name: "UNIVERSITY TOWN", address: "NUS, 2 COLLEGE AVENUE WEST", latitude: 1.304, longitude: 103.773 }],
+    });
+  });
+});
+
+test("geocode endpoint explains when OneMap credentials are not configured", async () => {
+  await withServer({ geocoder: async () => { throw new GeocodingConfigurationError(); } }, async (base) => {
+    const response = await fetch(`${base}/api/geocode?query=${encodeURIComponent("NUS Kent Ridge")}`);
+    assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.equal(body.error, "geocoding_not_configured");
+    assert.match(body.message, /backend environment/);
   });
 });
 

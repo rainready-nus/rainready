@@ -1,6 +1,6 @@
 # Local API contract (implemented prototype)
 
-The dependency-free local Node.js server currently implements `GET /health`, `GET /api/weather`, `GET /api/assessment`, event CRUD, and organiser-decision endpoints. Event records, decisions and test-notification previews persist in local SQLite; authentication and managed cloud persistence remain future work. All timestamps should be ISO 8601; displayed Singapore times use `Asia/Singapore`.
+The dependency-free local Node.js server currently implements `GET /health`, `GET /api/geocode`, `GET /api/weather`, `GET /api/assessment`, event CRUD, and organiser-decision endpoints. Event records, decisions and test-notification previews persist in local SQLite; authentication and managed cloud persistence remain future work. All timestamps should be ISO 8601; displayed Singapore times use `Asia/Singapore`.
 
 ## `GET /health`
 
@@ -14,6 +14,25 @@ Returns service status and prototype version.
 }
 ```
 
+## `GET /api/geocode?query={place-or-address}`
+
+Searches OneMap for a Singapore venue. `query` must contain 3–120 characters. The backend calls OneMap's Search API with `returnGeom=Y`, `getAddrDetails=Y`, and page 1, and returns up to eight usable matches as `{ name, address, latitude, longitude }`. The frontend displays each candidate and saves coordinates only after the organiser selects one. The same endpoint is used for a backup venue.
+
+The server reads `ONEMAP_ACCESS_TOKEN` from its environment and forwards it in the upstream `Authorization` header. The credential never goes to the browser. `400` means invalid search text; `503 geocoding_not_configured` means the local token is absent; `502 geocoding_service_error` means OneMap did not return usable results or was unavailable. Empty results are returned as an empty array with HTTP 200. A OneMap token is required for Search API calls and expires after three days; operators must replace expired tokens. Do not log or return the token or raw upstream response.
+
+Example response:
+
+```json
+{
+  "query": "University Town",
+  "results": [
+    { "name": "UNIVERSITY TOWN", "address": "NUS, SINGAPORE", "latitude": 1.304, "longitude": 103.773 }
+  ]
+}
+```
+
+The UI requires selecting a returned candidate before creating or changing a venue. Existing saved coordinates are retained during edits unless the user starts a new search. This is address lookup, not an authoritative verification that an event is physically at the selected point; organisers must check the address and coordinates. See [OneMap Search API](https://www.onemap.gov.sg/apidocs/search) and [authentication](https://www.onemap.gov.sg/apidocs/authentication).
+
 ## `GET /api/weather?latitude={lat}&longitude={lon}`
 
 Fetches and normalises the NEA two-hour forecast, rainfall and lightning-observation feeds for the requested location. Latitude and longitude are required numeric query parameters. The local server caches the most recent successful response from each feed in memory and labels fallback data as stale.
@@ -22,7 +41,7 @@ The response contains `retrievedAt`, the requested `location`, and a `sources` o
 
 Invalid/missing coordinates return HTTP 400. Unhandled upstream errors return HTTP 502. Individual source failures are isolated in a successful snapshot response, so the UI can display partial data.
 
-The prototype frontend calls this same-origin endpoint as part of **Check live risk**. Venue coordinates are entered manually; OneMap geocoding is not implemented yet.
+The prototype frontend calls this same-origin endpoint as part of **Check live risk**. Event venue coordinates are stored after manual review of a selected OneMap search result; weather requests still consume coordinates from the event record.
 
 ## `GET /api/assessment?latitude={lat}&longitude={lon}&sensitivity={low|medium|high}`
 
@@ -48,7 +67,7 @@ Every preview is labelled `mode: "test"` and `status: "not_sent"`, with an inten
 
 ## Local configuration and secret handling
 
-The optional `.env.example` contains only non-secret local defaults; `.env` and local database files are ignored by Git. Do not commit OneMap tokens, passwords, AWS credentials, private keys, or participant personal data. For a future AWS deployment, store runtime secrets in AWS Secrets Manager and grant the backend a least-privilege IAM execution role. For GitHub Actions deployment, prefer OIDC role federation and narrowly scoped GitHub Actions secrets/permissions rather than long-lived AWS keys. The app currently needs no OneMap token because address geocoding is not implemented.
+The optional `.env.example` contains only placeholders and non-secret local defaults; copy it to the ignored `.env` file and set `ONEMAP_ACCESS_TOKEN` there to enable address search. `npm start` loads `.env`. Do not commit OneMap tokens, passwords, AWS credentials, private keys, or participant personal data. For a future AWS deployment, store runtime secrets in AWS Secrets Manager and grant the backend a least-privilege IAM execution role. For GitHub Actions deployment, prefer OIDC role federation and narrowly scoped GitHub Actions secrets/permissions rather than long-lived AWS keys.
 
 ## `GET /events/{eventId}/assessment`
 
