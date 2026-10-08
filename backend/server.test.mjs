@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createServer } from "./server.mjs";
+import { assertLocalPrototypeSafeEnvironment, createServer } from "./server.mjs";
 import { createEventStore } from "./event-store.mjs";
 import { GeocodingConfigurationError } from "./geocoding.mjs";
 
@@ -132,6 +132,82 @@ test("state-changing requests reject a foreign browser origin", async () => {
     });
     assert.equal(response.status, 403);
     assert.equal((await response.json()).error, "cross_origin_request");
+  });
+});
+
+test("strict origin mode rejects mutation requests without an Origin header", async () => {
+  const previous = process.env.RAINREADY_REQUIRE_ORIGIN;
+  await withServer({}, async (base) => {
+    const client = await signUp(base, "strict-origin@example.com", "Strict Origin Club");
+    process.env.RAINREADY_REQUIRE_ORIGIN = "true";
+    try {
+      const response = await apiFetch(base, client, "/api/auth/logout", { method: "POST", body: "{}" });
+      assert.equal(response.status, 403);
+      assert.equal((await response.json()).error, "cross_origin_request");
+    } finally {
+      if (previous === undefined) delete process.env.RAINREADY_REQUIRE_ORIGIN;
+      else process.env.RAINREADY_REQUIRE_ORIGIN = previous;
+    }
+  });
+});
+
+test("public deployment mode fails closed while local prototype authentication is configured", () => {
+  assert.throws(() => assertLocalPrototypeSafeEnvironment({ RAINREADY_PUBLIC_DEPLOYMENT: "true" }), /Public deployment is blocked/);
+  assert.doesNotThrow(() => assertLocalPrototypeSafeEnvironment({ RAINREADY_PUBLIC_DEPLOYMENT: "false" }));
+});
+
+test("owners can view and remove organisation members, which revokes all their sessions", async () => {
+  await withServer({}, async (base) => {
+    const owner = await signUp(base, "owner@example.com", "Member Admin Club");
+    const invitationResponse = await apiFetch(base, owner, "/api/auth/invitations", { method: "POST", body: "{}" });
+    const invite = await invitationResponse.json();
+    const member = await signUp(base, "member@example.com", "", invite.code);
+
+    const members = await apiFetch(base, owner, "/api/auth/members");
+    assert.equal(members.status, 200);
+    assert.deepEqual((await members.json()).members.map(({ email, role }) => ({ email, role })), [
+      { email: "owner@example.com", role: "owner" }, { email: "member@example.com", role: "member" },
+    ]);
+    assert.equal((await apiFetch(base, member, "/api/auth/members")).status, 403);
+
+    const removed = await apiFetch(base, owner, `/api/auth/members/${encodeURIComponent(member.user.id)}`, { method: "DELETE" });
+    assert.equal(removed.status, 200);
+    assert.equal((await removed.json()).sessionsRevoked, true);
+    assert.equal((await fetch(`${base}/api/auth/me`, { headers: { cookie: member.cookie } })).status, 401);
+    assert.equal((await apiFetch(base, owner, "/api/auth/members").then((response) => response.json())).members.length, 1);
+  });
+});
+
+test("account-wide logout invalidates every session", async () => {
+  await withServer({}, async (base) => {
+    const client = await signUp(base, "logout-all@example.com", "Session Club");
+    const secondLogin = await fetch(`${base}/api/auth/login`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "logout-all@example.com", password: "correct horse battery staple" }),
+    });
+    const secondCookie = secondLogin.headers.get("set-cookie").split(";")[0];
+    const logout = await apiFetch(base, client, "/api/auth/logout-all", { method: "POST", body: "{}" });
+    assert.equal(logout.status, 204);
+    assert.equal((await fetch(`${base}/api/auth/me`, { headers: { cookie: client.cookie } })).status, 401);
+    assert.equal((await fetch(`${base}/api/auth/me`, { headers: { cookie: secondCookie } })).status, 401);
+  });
+});
+
+test("login attempts are persistently rate limited with Retry-After", async () => {
+  await withServer({}, async (base) => {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const response = await fetch(`${base}/api/auth/login`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "nobody@example.com", password: "wrong password" }),
+      });
+      assert.equal(response.status, 401);
+    }
+    const limited = await fetch(`${base}/api/auth/login`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "nobody@example.com", password: "wrong password" }),
+    });
+    assert.equal(limited.status, 429);
+    assert.ok(Number(limited.headers.get("retry-after")) > 0);
   });
 });
 

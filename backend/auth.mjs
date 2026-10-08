@@ -117,6 +117,9 @@ export function createAuthService(authStore) {
     logout(token) {
       if (typeof token === "string" && token.length >= 40 && token.length <= 100) authStore.deleteSession(hashToken(token));
     },
+    logoutAll(userId) {
+      return authStore.deleteUserSessions(userId);
+    },
     membership(userId, organizationId) {
       if (typeof organizationId !== "string" || organizationId.length > 80) return null;
       return authStore.getMembership(userId, organizationId);
@@ -130,6 +133,24 @@ export function createAuthService(authStore) {
       const expiresAt = new Date(now.getTime() + INVITATION_LIFETIME_MS).toISOString();
       authStore.createInvitation({ tokenHash: hashToken(code), organizationId, createdByUserId: userId, expiresAt, now: now.toISOString() });
       return { code, expiresAt, organizationName: membership.name };
+    },
+    listMembers({ userId, organizationId }) {
+      const membership = authStore.getMembership(userId, organizationId);
+      if (!membership) throw new AuthError(403, "organization_access_denied", "You are not a member of this organization.");
+      if (membership.role !== "owner") throw new AuthError(403, "owner_required", "Only an organization owner can manage members.");
+      return authStore.listOrganizationMembers(organizationId);
+    },
+    removeMember({ userId, organizationId, targetUserId }) {
+      const membership = authStore.getMembership(userId, organizationId);
+      if (!membership) throw new AuthError(403, "organization_access_denied", "You are not a member of this organization.");
+      if (membership.role !== "owner") throw new AuthError(403, "owner_required", "Only an organization owner can manage members.");
+      if (typeof targetUserId !== "string" || targetUserId.length > 80) {
+        throw new AuthError(400, "invalid_member", "Select a valid organisation member.");
+      }
+      if (!authStore.removeOrganizationMember({ actorUserId: userId, organizationId, targetUserId })) {
+        throw new AuthError(400, "member_not_removable", "This member cannot be removed. Owners cannot be removed through this screen.");
+      }
+      return { removed: true };
     },
   };
 }
