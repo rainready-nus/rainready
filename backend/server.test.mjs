@@ -269,6 +269,7 @@ test("assessment endpoint combines source snapshot with requested sensitivity", 
       forecast: { data: { nearestArea: { forecast: "Cloudy" } }, freshness: { status: "current" } },
       rainfall: { data: { unit: "mm", nearestStation: { value: 0, name: "Test station", distanceKm: 1 } }, freshness: { status: "current" } },
       lightning: { data: { observations: [], interpretation: "observations only" }, freshness: { status: "current" } },
+      airQuality: { data: { observedAt: "2026-10-06T09:00:00.000Z", nearestRegion: { name: "central", psiTwentyFourHourly: 72 } }, freshness: { status: "current" } },
     },
   });
   await withServer({ snapshot }, async (base) => {
@@ -282,6 +283,15 @@ test("assessment endpoint combines source snapshot with requested sensitivity", 
     assert.equal(body.assessment.inputs.sensitivity.level, "medium");
     assert.equal(body.assessment.inputs.historicalProbability, null);
     assert.ok(body.assessment.excludedComponents.some((item) => item.name === "historical_probability"));
+    assert.equal(body.assessment.airQuality.level, "moderate");
+
+    const badLightning = await apiFetch(base, client, "/api/assessment?latitude=1.3&longitude=103.8&sensitivity=medium&lightningStatus=observed");
+    assert.equal(badLightning.status, 400);
+    const override = await apiFetch(base, client, "/api/assessment?latitude=1.3&longitude=103.8&sensitivity=medium&lightningStatus=confirmed_alert");
+    const overrideBody = await override.json();
+    assert.equal(override.status, 200);
+    assert.equal(overrideBody.assessment.status, "override");
+    assert.equal(overrideBody.assessment.recommendedAction, "stop_and_shelter");
   });
 });
 

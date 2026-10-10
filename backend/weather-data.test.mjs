@@ -62,10 +62,27 @@ function fixtures() {
         }],
       },
     },
+    airQuality: {
+      code: 0,
+      data: {
+        regionMetadata: [
+          { name: "west", labelLocation: { latitude: 1.35735, longitude: 103.7 } },
+          { name: "east", labelLocation: { latitude: 1.35735, longitude: 103.94 } },
+        ],
+        items: [{
+          timestamp: "2026-10-06T15:00:00+08:00",
+          updatedTimestamp: "2026-10-06T15:15:00+08:00",
+          readings: {
+            psi_twenty_four_hourly: { west: 82, east: 105 },
+            pm25_twenty_four_hourly: { west: 34, east: 58 },
+          },
+        }],
+      },
+    },
   };
 }
 
-test("fetches the three public sources and normalises nearest-area, station and lightning data", async () => {
+test("fetches the four public sources and normalises weather, lightning and air-quality data", async () => {
   const payloads = fixtures();
   const fetchImpl = async (url) => {
     const name = Object.keys(DATA_ENDPOINTS).find((key) => DATA_ENDPOINTS[key] === url);
@@ -88,6 +105,10 @@ test("fetches the three public sources and normalises nearest-area, station and 
   assert.equal(result.sources.lightning.data.observations[0].type, "C");
   assert.equal(result.sources.lightning.data.status, "observations_returned");
   assert.match(result.sources.lightning.data.interpretation, /not an official warning/);
+  assert.equal(result.sources.airQuality.data.nearestRegion.name, "west");
+  assert.equal(result.sources.airQuality.data.nearestRegion.psiTwentyFourHourly, 82);
+  assert.equal(result.sources.airQuality.data.nearestRegion.pm25TwentyFourHourly, 34);
+  assert.equal(result.sources.airQuality.freshness.status, "current");
 });
 
 test("reports an empty lightning result as no observations returned, not as an all-clear", async () => {
@@ -101,6 +122,17 @@ test("reports an empty lightning result as no observations returned, not as an a
   assert.equal(result.sources.lightning.data.status, "no_observations_returned");
   assert.equal(result.sources.lightning.data.observations.length, 0);
   assert.match(result.sources.lightning.data.interpretation, /not an official warning/);
+});
+
+test("does not turn a missing regional PSI reading into zero", async () => {
+  const payloads = fixtures();
+  payloads.airQuality.data.items[0].readings.psi_twenty_four_hourly.west = null;
+  const fetchImpl = async (url) => {
+    const name = Object.keys(DATA_ENDPOINTS).find((key) => DATA_ENDPOINTS[key] === url);
+    return response(payloads[name]);
+  };
+  const result = await getWeatherSnapshot({ latitude: 1.35, longitude: 103.75, fetchImpl, now });
+  assert.equal(result.sources.airQuality.data.nearestRegion.psiTwentyFourHourly, null);
 });
 
 test("keeps a last-good response visible as stale when a source fails", async () => {

@@ -26,8 +26,12 @@ export function assessRisk({
   sensitivity,
   lightningStatus = "none",
 }) {
+  if (!["none", "confirmed_alert"].includes(lightningStatus)) {
+    throw new RangeError("lightningStatus must be none or confirmed_alert");
+  }
+  const lightningOverride = lightningStatus === "confirmed_alert";
   const inputs = {
-    forecast: scoreInput("forecastSeverity", forecastSeverity),
+    forecast: scoreInput("forecastSeverity", forecastSeverity, lightningOverride),
     rainfall: scoreInput("rainfallScore", rainfallScore, true),
     history: scoreInput("historicalProbability", historicalProbability, true),
     sensitivity: scoreInput("sensitivity", sensitivity),
@@ -45,7 +49,7 @@ export function assessRisk({
   }));
 
   // Safety override: a confirmed official alert bypasses ordinary score thresholds.
-  if (lightningStatus === "confirmed_alert") {
+  if (lightningOverride) {
     return {
       score: 100,
       riskLevel: "critical",
