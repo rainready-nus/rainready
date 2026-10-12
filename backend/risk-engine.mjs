@@ -48,14 +48,14 @@ export function assessRisk({
     }];
   }));
 
-  // Safety override: a confirmed official alert bypasses ordinary score thresholds.
+  // Demo-only override: an organiser-confirmed demo alert bypasses ordinary score thresholds.
   if (lightningOverride) {
     return {
       score: 100,
       riskLevel: "critical",
       recommendedAction: "stop_and_shelter",
       override: true,
-      reasons: ["Confirmed lightning alert: stop outdoor activity and seek shelter."],
+      reasons: ["Organiser-confirmed demo lightning alert: stop outdoor activity and seek shelter. This is not an official NEA warning."],
       breakdown: Object.fromEntries(Object.entries(availableInputs).map(([key, value]) => [key, {
         input: value,
         weight: WEIGHTS[key],

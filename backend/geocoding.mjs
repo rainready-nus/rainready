@@ -2,7 +2,7 @@ const ONEMAP_SEARCH_URL = "https://www.onemap.gov.sg/api/common/elastic/search";
 const ONEMAP_TOKEN_URL = "https://www.onemap.gov.sg/api/auth/post/getToken";
 
 export class GeocodingConfigurationError extends Error {
-  constructor(message = "OneMap search is not configured. Set ONEMAP_ACCESS_TOKEN in the backend environment.") {
+  constructor(message = "OneMap search is not configured. Set ONEMAP_ACCESS_TOKEN or both ONEMAP_API_EMAIL and ONEMAP_API_PASSWORD in the backend environment.") {
     super(message);
     this.name = "GeocodingConfigurationError";
   }

@@ -37,7 +37,7 @@ This custom local authentication is **not production-ready**: there is no verifi
 
 Searches OneMap for a Singapore venue. `query` must contain 3–120 characters. The backend calls OneMap's Search API with `returnGeom=Y`, `getAddrDetails=Y`, and page 1, and returns up to eight usable matches as `{ name, address, latitude, longitude }`. The frontend displays each candidate and saves coordinates only after the organiser selects one. The same endpoint is used for a backup venue.
 
-The server reads `ONEMAP_ACCESS_TOKEN` from its environment and forwards it in the upstream `Authorization` header. The credential never goes to the browser. `400` means invalid search text; `503 geocoding_not_configured` means the local token is absent; `502 geocoding_service_error` means OneMap did not return usable results or was unavailable. Empty results are returned as an empty array with HTTP 200. A OneMap token is required for Search API calls and expires after three days; operators must replace expired tokens. Do not log or return the token or raw upstream response.
+The backend can use either a current `ONEMAP_ACCESS_TOKEN`, or both `ONEMAP_API_EMAIL` and `ONEMAP_API_PASSWORD` to obtain a token from OneMap on demand. In credential mode, the token is cached in server memory, refreshed using the returned expiry timestamp, and refreshed/retried once if OneMap rejects an expired token. The token and credentials remain server-side and are never sent to the browser. `400` means invalid search text; `503 geocoding_not_configured` means neither configuration option is present; `502 geocoding_service_error` means OneMap authentication/search failed or the service was unavailable. Empty results are returned as an empty array with HTTP 200. OneMap documents a three-day token lifetime. Do not log or return the token, credentials, or raw upstream response.
 
 Example response:
 
@@ -90,7 +90,7 @@ Every preview is labelled `mode: "test"` and `status: "not_sent"`, with an inten
 
 ## Local configuration and secret handling
 
-The optional `.env.example` contains only placeholders and non-secret local defaults; copy it to the ignored `.env` file and set `ONEMAP_ACCESS_TOKEN` there to enable address search. `npm start` loads `.env`. Do not commit OneMap tokens, passwords, AWS credentials, private keys, or participant personal data. For a future AWS deployment, store runtime secrets in AWS Secrets Manager and grant the backend a least-privilege IAM execution role. For GitHub Actions deployment, prefer OIDC role federation and narrowly scoped GitHub Actions secrets/permissions rather than long-lived AWS keys.
+The optional `.env.example` contains only placeholders and non-secret local defaults; copy it to the ignored `.env` file and configure either `ONEMAP_ACCESS_TOKEN` or both `ONEMAP_API_EMAIL` and `ONEMAP_API_PASSWORD` there to enable address search. `npm start` loads `.env`. Email/password mode stores the registered OneMap credentials locally and should only be used in a protected local environment; never share them or commit them. Do not commit OneMap tokens, passwords, AWS credentials, private keys, or participant personal data. For a future AWS deployment, store runtime secrets in AWS Secrets Manager and grant the backend a least-privilege IAM execution role. For GitHub Actions deployment, prefer OIDC role federation and narrowly scoped GitHub Actions secrets/permissions rather than long-lived AWS keys.
 
 ## `GET /events/{eventId}/assessment`
 
