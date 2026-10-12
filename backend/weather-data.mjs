@@ -7,12 +7,14 @@ export const DATA_ENDPOINTS = Object.freeze({
   forecast: "https://api-open.data.gov.sg/v2/real-time/api/two-hr-forecast",
   rainfall: "https://api-open.data.gov.sg/v2/real-time/api/rainfall",
   lightning: "https://api-open.data.gov.sg/v2/real-time/api/weather?api=lightning",
+  airQuality: "https://api-open.data.gov.sg/v2/real-time/api/psi",
 });
 
 const FRESHNESS_LIMITS_MS = Object.freeze({
   forecast: 60 * 60 * 1000,
   rainfall: 15 * 60 * 1000,
   lightning: 5 * 60 * 1000,
+  airQuality: 90 * 60 * 1000,
 });
 
 const finiteCoordinate = (value, label, min, max) => {
@@ -172,6 +174,40 @@ function normalizeLightning(payload, target, retrievedAt) {
   };
 }
 
+function normalizeAirQuality(payload, target, retrievedAt) {
+  const data = requireData(payload, "air quality");
+  const regions = data.regionMetadata ?? data.region_metadata ?? [];
+  const nearest = nearestLocation(target, regions, (region) => region.labelLocation ?? region.label_location);
+  const item = latestNotFuture(data.items ?? [], (entry) => entry.timestamp, Date.parse(retrievedAt));
+  if (!item) throw new Error("air quality contains no usable item");
+
+  const regionName = nearest?.candidate?.name?.toLowerCase() ?? null;
+  const readings = item.readings ?? {};
+  const psiByRegion = readings.psi_twenty_four_hourly ?? {};
+  const pm25ByRegion = readings.pm25_twenty_four_hourly ?? {};
+  const numericReading = (value) => value === null || value === undefined || value === "" ? null : Number(value);
+  const psi = regionName === null ? null : numericReading(psiByRegion[regionName]);
+  const pm25 = regionName === null ? null : numericReading(pm25ByRegion[regionName]);
+  const labelLocation = nearest?.candidate?.labelLocation ?? nearest?.candidate?.label_location;
+  const observedAt = item.timestamp ?? null;
+
+  return {
+    observedAt,
+    updatedAt: item.updatedTimestamp ?? item.update_timestamp ?? null,
+    nearestRegion: nearest ? {
+      name: nearest.candidate.name,
+      latitude: Number(labelLocation.latitude),
+      longitude: Number(labelLocation.longitude),
+      distanceKm: Number(nearest.distanceKm.toFixed(2)),
+      psiTwentyFourHourly: Number.isFinite(psi) ? psi : null,
+      pm25TwentyFourHourly: Number.isFinite(pm25) ? pm25 : null,
+    } : null,
+    unit: { psi: "index", pm25TwentyFourHourly: "ug/m3" },
+    interpretation: "24-hour PSI supports general health planning; individual risk also depends on health status, exposure duration and activity intensity.",
+    freshness: sourceStatus(observedAt, retrievedAt, "airQuality"),
+  };
+}
+
 async function requestJson(source, url, fetchImpl, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -245,10 +281,12 @@ export async function getWeatherSnapshot({
       forecast: processSource("forecast", normalizeForecast),
       rainfall: processSource("rainfall", normalizeRainfall),
       lightning: processSource("lightning", normalizeLightning),
+      airQuality: processSource("airQuality", normalizeAirQuality),
     },
     notes: [
       "Forecast and rainfall locations are represented by the nearest official area/station; inspect distanceKm before relying on them.",
       "Lightning observations are contextual data only; this module does not create official alerts or resume activities.",
+      "Air-quality advice uses the nearest NEA reporting region and the reported 24-hour PSI; it is not a medical diagnosis.",
       "Freshness thresholds are prototype assumptions and should be reviewed against observed API latency.",
     ],
   };

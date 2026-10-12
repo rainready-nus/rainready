@@ -54,21 +54,25 @@ The UI requires selecting a returned candidate before creating or changing a ven
 
 ## `GET /api/weather?latitude={lat}&longitude={lon}`
 
-Fetches and normalises the NEA two-hour forecast, rainfall and lightning-observation feeds for the requested location. Latitude and longitude are required numeric query parameters. The local server caches the most recent successful response from each feed in memory and labels fallback data as stale.
+Fetches and normalises the NEA two-hour forecast, rainfall, lightning-observation and 24-hour PSI feeds for the requested location. Latitude and longitude are required numeric query parameters. The local server caches the most recent successful response from each feed in memory and labels fallback data as stale.
 
-The response contains `retrievedAt`, the requested `location`, and a `sources` object. Each source includes normalised `data`, `freshness` (`current`, `stale`, or `unavailable`), and an optional `error`. Forecast and rainfall include nearest-area/station distance; lightning includes observation locations and distances. A lightning feed with no returned observations does not prove there is no lightning.
+The response contains `retrievedAt`, the requested `location`, and a `sources` object. Each source includes normalised `data`, `freshness` (`current`, `stale`, or `unavailable`), and an optional `error`. Forecast and rainfall include nearest-area/station distance; lightning includes observation locations and distances; air quality includes the nearest reporting region, 24-hour PSI and 24-hour PM2.5 reading. A lightning feed with no returned observations does not prove there is no lightning.
 
 Invalid/missing coordinates return HTTP 400. Unhandled upstream errors return HTTP 502. Individual source failures are isolated in a successful snapshot response, so the UI can display partial data.
 
 The prototype frontend calls this same-origin endpoint as part of **Check live risk**. Event venue coordinates are stored after manual review of a selected OneMap search result; weather requests still consume coordinates from the event record.
 
-## `GET /api/assessment?latitude={lat}&longitude={lon}&sensitivity={low|medium|high}`
+## `GET /api/assessment?latitude={lat}&longitude={lon}&sensitivity={low|medium|high}&lightningStatus={none|confirmed_alert}`
 
 Fetches the same source snapshot and adds an `assessment` object. Forecast severity, the nearest station's latest five-minute total rainfall, and event sensitivity are mapped to 0–100 inputs. The [NEA rainfall dataset](https://data.gov.sg/datasets/d_6580738cdd7db79374ed3152159fbd69/view) describes precipitation at weather-station level and updates every five minutes; the score mapping is a RainReady assumption, not an NEA hazard threshold.
 
 Base component weights are forecast 0.50, rainfall 0.20, historical probability 0.15, and sensitivity 0.15. Historical probability is currently `null` and excluded because no validated event-matched value is available. Missing inputs are excluded and remaining weights are renormalised; the response exposes the effective weights, component reasons, and `excludedComponents`. If the forecast is unavailable, no numeric score is returned and manual review is required. If rainfall is unavailable, the score is marked partial.
 
-This risk mapping is an experimental course-project heuristic, not a guarantee of safety or official NEA advice. Lightning observations remain separate context and are never interpreted as an official warning or all-clear.
+The response also includes a separate `airQuality` advisory derived from the nearest region's official 24-hour PSI. PSI is not added to the routine weather score. The advisory uses NEA bands: Good 0-50, Moderate 51-100, Unhealthy 101-200, Very Unhealthy 201-300 and Hazardous above 300, with separate advice for sensitive groups.
+
+`lightningStatus` defaults to `none`. `confirmed_alert` is accepted only as an explicit organiser-confirmed local demo input and returns an `override` assessment with score 100 and `stop_and_shelter`. It does not infer an official alert from the NEA observation feed. Clearing the input never auto-resumes an activity; the organiser must reassess and record the decision.
+
+The routine risk mapping is an experimental course-project heuristic, not a guarantee of safety or official NEA advice. Lightning observations remain separate context and are never interpreted as an official warning or all-clear.
 
 ## Event endpoints (implemented locally)
 

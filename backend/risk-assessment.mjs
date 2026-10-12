@@ -36,18 +36,91 @@ function describeFreshness(source) {
   return source?.freshness?.status ?? "unavailable";
 }
 
-export function buildRiskAssessment({ snapshot, sensitivity } = {}) {
+export function buildAirQualityAdvisory(source) {
+  const region = source?.data?.nearestRegion;
+  const psi = region?.psiTwentyFourHourly;
+  const status = describeFreshness(source);
+  if (!Number.isFinite(psi)) {
+    return {
+      status: "unavailable",
+      level: "unavailable",
+      psi: null,
+      region: region?.name ?? null,
+      advice: "Air-quality advice is unavailable; check the latest official NEA health advisory before prolonged outdoor activity.",
+      sensitiveGroupsAdvice: "People who feel unwell or have health concerns should seek appropriate medical advice.",
+    };
+  }
+
+  const band = psi <= 50
+    ? { level: "good", advice: "Normal activities.", sensitive: "Normal activities." }
+    : psi <= 100
+      ? { level: "moderate", advice: "Normal activities; monitor symptoms and official updates.", sensitive: "Normal activities, but reduce exposure if symptoms occur." }
+      : psi <= 200
+        ? { level: "unhealthy", advice: "Reduce prolonged or strenuous outdoor physical exertion.", sensitive: "Minimise prolonged or strenuous outdoor physical exertion; people with chronic lung or heart disease should avoid it." }
+        : psi <= 300
+          ? { level: "very_unhealthy", advice: "Avoid prolonged or strenuous outdoor physical exertion.", sensitive: "Minimise outdoor activity; people with chronic lung or heart disease should avoid outdoor activity." }
+          : { level: "hazardous", advice: "Minimise outdoor activity.", sensitive: "Avoid outdoor activity." };
+
+  return {
+    status,
+    level: band.level,
+    psi,
+    region: region.name,
+    observedAt: source.data.observedAt ?? null,
+    updatedAt: source.data.updatedAt ?? null,
+    advice: band.advice,
+    sensitiveGroupsAdvice: band.sensitive,
+    basis: "NEA 24-hour PSI health-advisory bands (0-50, 51-100, 101-200, 201-300, above 300).",
+  };
+}
+
+export function buildRiskAssessment({ snapshot, sensitivity, lightningStatus = "none" } = {}) {
   const sensitivityScore = RISK_MAPPINGS.sensitivity[sensitivity];
   if (sensitivityScore === undefined) {
     throw new RangeError("sensitivity must be low, medium, or high");
   }
+  if (!["none", "confirmed_alert"].includes(lightningStatus)) {
+    throw new RangeError("lightningStatus must be none or confirmed_alert");
+  }
 
   const forecastSource = snapshot?.sources?.forecast;
   const rainfallSource = snapshot?.sources?.rainfall;
+  const lightningSource = snapshot?.sources?.lightning;
+  const airQuality = buildAirQualityAdvisory(snapshot?.sources?.airQuality);
   const forecastText = forecastSource?.data?.nearestArea?.forecast;
   const forecastSeverity = scoreForecast(forecastText);
   const rain = rainfallSource?.data?.nearestStation?.value;
   const rainfallScore = scoreRainfall(rain, rainfallSource?.data?.unit);
+  if (lightningStatus === "confirmed_alert") {
+    const assessment = assessRisk({
+      forecastSeverity,
+      rainfallScore,
+      historicalProbability: null,
+      sensitivity: sensitivityScore,
+      lightningStatus,
+    });
+    return {
+      status: "override",
+      ...assessment,
+      inputs: {
+        forecast: forecastSeverity === null ? null : { text: forecastText, score: forecastSeverity, freshness: describeFreshness(forecastSource) },
+        rainfall: rainfallScore === null ? null : { fiveMinuteTotalMm: rain, score: rainfallScore, freshness: describeFreshness(rainfallSource) },
+        sensitivity: { level: sensitivity, score: sensitivityScore },
+        historicalProbability: null,
+      },
+      excludedComponents: [{ name: "historical_probability", reason: "No validated event-matched historical probability is available." }],
+      formula: "Lightning safety override: an organiser-confirmed demo alert bypasses the routine weather score.",
+      lightning: lightningSource ?? null,
+      lightningOverride: {
+        active: true,
+        status: "confirmed_alert",
+        source: "organiser-confirmed demo alert",
+        note: "This local prototype does not infer an official warning from the NEA observation feed and never auto-resumes an event.",
+      },
+      airQuality,
+      safetyNote: "Stop outdoor activity and seek shelter under the confirmed demo alert. The organiser must reassess before resuming.",
+    };
+  }
   if (forecastSeverity === null) {
     return {
       status: "unavailable",
@@ -60,7 +133,9 @@ export function buildRiskAssessment({ snapshot, sensitivity } = {}) {
         { name: "historical_probability", reason: "No validated event-matched historical probability is available." },
       ],
       formula: "Score unavailable: current forecast is required. Do not interpret as low risk.",
-      lightning: snapshot?.sources?.lightning ?? null,
+      lightning: lightningSource ?? null,
+      lightningOverride: { active: false, status: "none" },
+      airQuality,
     };
   }
 
@@ -102,7 +177,9 @@ export function buildRiskAssessment({ snapshot, sensitivity } = {}) {
       "Historical probability is not included in the score.",
       ...(status === "stale" ? ["At least one used data source is labelled stale; review its timestamp before acting."] : []),
     ],
-    lightning: snapshot?.sources?.lightning ?? null,
+    lightning: lightningSource ?? null,
+    lightningOverride: { active: false, status: "none" },
+    airQuality,
     safetyNote: "This prototype score is decision support, not an official warning or a guarantee of safety. Lightning observations are not used as an official alert or all-clear.",
   };
 }

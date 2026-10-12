@@ -332,11 +332,15 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
       let latitude;
       let longitude;
       const sensitivity = url.searchParams.get("sensitivity");
+      const lightningStatus = url.searchParams.get("lightningStatus") ?? "none";
       try {
         latitude = parseCoordinate(url.searchParams.get("latitude"), "latitude", -90, 90);
         longitude = parseCoordinate(url.searchParams.get("longitude"), "longitude", -180, 180);
         if (!["low", "medium", "high"].includes(sensitivity)) {
           throw new RangeError("sensitivity must be low, medium, or high");
+        }
+        if (!["none", "confirmed_alert"].includes(lightningStatus)) {
+          throw new RangeError("lightningStatus must be none or confirmed_alert");
         }
       } catch (error) {
         return sendJson(response, 400, { error: "invalid_assessment_input", message: error.message });
@@ -344,7 +348,7 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
 
       try {
         const snapshotResult = await snapshot({ latitude, longitude, cache });
-        const assessment = buildRiskAssessment({ snapshot: snapshotResult, sensitivity });
+        const assessment = buildRiskAssessment({ snapshot: snapshotResult, sensitivity, lightningStatus });
         return sendJson(response, 200, { ...snapshotResult, assessment });
       } catch (error) {
         return sendJson(response, 502, {

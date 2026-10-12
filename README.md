@@ -4,7 +4,7 @@ RainReady is a course-project cloud-service prototype for helping organisers mon
 
 ## Current prototype
 
-The browser interface calls a local Node.js backend. The backend retrieves NEA forecast, rainfall and lightning-observation data and calculates an explainable prototype assessment for an event's coordinates and sensitivity. OneMap address search lets organisers find and explicitly select main and backup venue locations; coordinates are returned and stored by the backend flow, not typed by the organiser. Historical probability is excluded until validated.
+The browser interface calls a local Node.js backend. The backend retrieves NEA forecast, rainfall, lightning-observation and 24-hour PSI data and calculates an explainable prototype assessment for an event's coordinates and sensitivity. OneMap address search lets organisers find and explicitly select main and backup venue locations; coordinates are returned and stored by the backend flow, not typed by the organiser. Historical probability is excluded until validated.
 
 The prototype supports:
 
@@ -14,10 +14,11 @@ The prototype supports:
 - server-enforced organisation isolation for event lists, details, edits, decisions, deletes, weather checks and location search;
 - recording a decision (continue, prepare, relocate, postpone or cancel), required reason and timestamp;
 - generating a test-only notification preview marked `not_sent`—no email/SMS/push message is sent and no participant contact details are collected;
-- retrieving current weather source readings, displaying freshness and explaining the risk assessment.
+- retrieving current weather and air-quality readings, displaying freshness, explaining the routine risk score, and presenting a separate NEA-aligned PSI advisory;
+- applying a backend stop-and-shelter override when an organiser explicitly confirms the local demo lightning alert, without treating the observation feed as an official warning or automatically resuming an activity;
 - searching OneMap by Singapore place name/address, reviewing matching addresses and confirming a result before saving its coordinates.
 
-**Safety and scope:** risk mappings and bands are experimental RainReady assumptions, not official NEA thresholds or a safety guarantee. Historical probability is excluded. Lightning observations are not an official warning or all-clear; the separate alert simulation is not connected to NEA. Organisers remain responsible for decisions, and the system never auto-resumes an activity. OneMap search is an address-to-coordinate lookup only; organisers must verify the selected result. Authentication is a local course-prototype implementation, not production-hardened identity infrastructure; do not expose it publicly or deploy it to AWS. AWS Cognito, verified email/account recovery/MFA, distributed rate limiting, production monitoring, cloud storage controls and security review are not implemented.
+**Safety and scope:** routine risk mappings and bands are experimental RainReady assumptions, not official NEA thresholds or a safety guarantee. Historical probability is excluded and the remaining score weights are renormalised. The air-quality path reports the nearest region's official 24-hour PSI and follows NEA health-advisory bands, but it is not medical advice and is not folded into the routine weather score. Lightning observations are not an official warning or all-clear; the separate organiser-confirmed alert is an explicit local demo input. Organisers remain responsible for decisions, and the system never auto-resumes an activity. OneMap search is an address-to-coordinate lookup only; organisers must verify the selected result. Authentication is a local course-prototype implementation, not production-hardened identity infrastructure; do not expose it publicly or deploy it to AWS. AWS Cognito, verified email/account recovery/MFA, distributed rate limiting, production monitoring, cloud storage controls and security review are not implemented.
 
 ## Run locally
 
@@ -28,7 +29,7 @@ npm start
 npm test
 ```
 
-Open `http://127.0.0.1:8787`. The API binds to loopback for local development. On first launch, choose **Create account** and create a workspace; account passwords must be at least 12 characters. The workspace owner can privately share a one-time invitation code, view members, and remove a member (which revokes all that user's sessions). Any signed-in user can use **Sign out all devices** to revoke every session on their account. Members join through **Create account** using the invitation code. Accounts, sessions and rate-limit counters are stored in the local ignored SQLite database. To enable address search, copy `.env.example` to `.env`, add your OneMap access token as `ONEMAP_ACCESS_TOKEN`, then run `npm start`; Node loads the local `.env` file. Register/sign in at [OneMap API](https://www.onemap.gov.sg/apidocs/) to obtain a token. OneMap documents a three-day token lifetime, so replace it after expiry; keep it only in the ignored local `.env` or a managed secret store, never in frontend code or GitHub. Without a token, event weather functions still work for saved locations, but new address searches return a clear setup message. Do not add actual credentials to `.env.example`.
+Open `http://127.0.0.1:8787`. The API binds to loopback for local development. On first launch, choose **Create account** and create a workspace; account passwords must be at least 12 characters. The workspace owner can privately share a one-time invitation code, view members, and remove a member (which revokes all that user's sessions). Any signed-in user can use **Sign out all devices** to revoke every session on their account. Members join through **Create account** using the invitation code. Accounts, sessions and rate-limit counters are stored in the local ignored SQLite database. To enable address search, copy `.env.example` to `.env`. Either set a current `ONEMAP_ACCESS_TOKEN`, or set both `ONEMAP_API_EMAIL` and `ONEMAP_API_PASSWORD` so the backend can generate a token and automatically refresh/retry once when OneMap rejects an expired token. Generated tokens are cached in server memory and are never returned to the browser. OneMap documents a three-day token lifetime. Keep all OneMap values only in the ignored local `.env` or a managed secret store, never in frontend code or GitHub. Without a token or credentials, event weather functions and predefined demo venues still work, while live address searches return a clear setup message. Do not add actual credentials to `.env.example`.
 
 ## Local data and migration
 
@@ -61,4 +62,6 @@ Credential handling when deployment begins:
 ## Team workflow and status
 
 Use short feature branches and Pull Requests; keep `main` runnable. Discuss API changes in [`docs/api-contract.md`](docs/api-contract.md) before frontend/backend work diverges. Event CRUD, SQLite local persistence, local login/organisation isolation, decisions, test previews and OneMap venue search are implemented. Cloud database migration, production identity integration, live notification delivery, full evaluation and AWS deployment remain future work.
+
+For the current implementation status, local setup, verification steps and remaining-work boundaries, see [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
