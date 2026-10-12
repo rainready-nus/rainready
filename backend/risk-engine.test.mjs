@@ -32,6 +32,8 @@ test("confirmed lightning overrides ordinary inputs and never suggests automatic
   assert.equal(result.riskLevel, "critical");
   assert.equal(result.recommendedAction, "stop_and_shelter");
   assert.equal(result.override, true);
+  assert.match(result.reasons[0], /organiser-confirmed demo lightning alert/i);
+  assert.match(result.reasons[0], /not an official NEA warning/i);
 });
 
 test("rejects scores outside the documented input range", () => {

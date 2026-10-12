@@ -238,7 +238,9 @@ test("geocode endpoint explains when OneMap credentials are not configured", asy
     assert.equal(response.status, 503);
     const body = await response.json();
     assert.equal(body.error, "geocoding_not_configured");
-    assert.match(body.message, /backend environment/);
+    assert.match(body.message, /ONEMAP_ACCESS_TOKEN/);
+    assert.match(body.message, /ONEMAP_API_EMAIL/);
+    assert.match(body.message, /ONEMAP_API_PASSWORD/);
   });
 });
 

@@ -215,7 +215,7 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
           return sendJson(response, 400, { error: "invalid_search_query", message: error.message });
         }
         if (error instanceof GeocodingConfigurationError) {
-          return sendJson(response, 503, { error: "geocoding_not_configured", message: "Address search is not configured. Add a OneMap access token to the backend environment; no credentials are sent to the browser." });
+          return sendJson(response, 503, { error: "geocoding_not_configured", message: "Address search is not configured. Set ONEMAP_ACCESS_TOKEN or both ONEMAP_API_EMAIL and ONEMAP_API_PASSWORD in the backend environment; no credentials are sent to the browser." });
         }
         if (error instanceof GeocodingUpstreamError) {
           return sendJson(response, 502, { error: "geocoding_service_error", message: error.message });
