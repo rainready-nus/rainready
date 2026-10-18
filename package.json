@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node --env-file-if-exists=.env backend/server.mjs",
-    "test": "node --test backend/*.test.mjs"
+    "test": "node --test backend/*.test.mjs",
+    "db:export": "node database/postgres/scripts/export-sqlite.mjs"
   }
 }
 
