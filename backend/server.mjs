@@ -40,6 +40,21 @@ function parseCoordinate(value, name, min, max) {
   return number;
 }
 
+function parseEventDateTime(value) {
+  if (value === null) return null;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) {
+    throw new RangeError("eventDateTime must use Singapore local time in YYYY-MM-DDTHH:mm format");
+  }
+  const [datePart, timePart] = value.split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute] = timePart.split(":").map(Number);
+  const check = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day || hour > 23 || minute > 59) {
+    throw new RangeError("eventDateTime is not a valid calendar date and time");
+  }
+  return `${value}:00+08:00`;
+}
+
 async function readJsonBody(request) {
   let body = "";
   for await (const chunk of request) {
@@ -332,23 +347,29 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
       let latitude;
       let longitude;
       const sensitivity = url.searchParams.get("sensitivity");
+      const activityType = url.searchParams.get("activityType") ?? "Other";
       const lightningStatus = url.searchParams.get("lightningStatus") ?? "none";
+      let eventDateTime;
       try {
         latitude = parseCoordinate(url.searchParams.get("latitude"), "latitude", -90, 90);
         longitude = parseCoordinate(url.searchParams.get("longitude"), "longitude", -180, 180);
         if (!["low", "medium", "high"].includes(sensitivity)) {
           throw new RangeError("sensitivity must be low, medium, or high");
         }
+        if (!["Sports", "Performance", "Community gathering", "Other"].includes(activityType)) {
+          throw new RangeError("activityType must be a supported RainReady activity type");
+        }
         if (!["none", "confirmed_alert"].includes(lightningStatus)) {
           throw new RangeError("lightningStatus must be none or confirmed_alert");
         }
+        eventDateTime = parseEventDateTime(url.searchParams.get("eventDateTime"));
       } catch (error) {
         return sendJson(response, 400, { error: "invalid_assessment_input", message: error.message });
       }
 
       try {
         const snapshotResult = await snapshot({ latitude, longitude, cache });
-        const assessment = buildRiskAssessment({ snapshot: snapshotResult, sensitivity, lightningStatus });
+        const assessment = buildRiskAssessment({ snapshot: snapshotResult, sensitivity, lightningStatus, eventDateTime, activityType });
         return sendJson(response, 200, { ...snapshotResult, assessment });
       } catch (error) {
         return sendJson(response, 502, {

@@ -22,11 +22,14 @@ Screenshot: completed event form showing confirmed main and backup coordinates, 
 
 ## 3. Review risk and advisories
 
-1. Select **Check live risk** on an event.
-2. Review the routine weather score, component weights, source freshness and excluded historical component.
-3. Review the separate nearest-region 24-hour PSI advisory.
-4. Inspect lightning observations as context only.
-5. To demonstrate the safety path, select **Confirm demo alert**, then run **Check live risk** again. The backend must return the stop-and-shelter override.
+1. Select **Check event-time risk** on an event. RainReady sends the saved date/time and main-venue coordinates to the backend.
+2. RainReady selects the NEA two-hour forecast if its valid period covers the event start; otherwise it tries a covering period from the currently published NEA 24-hour regional forecast.
+3. If the activity is 2–4 calendar days away and neither precise feed covers the start, review the provisional daily planning estimate, based on NEA's date-specific daily weather description, forecast high-temperature band and event sensitivity, plus preparation suggestions tailored to the weather and activity type. It is Singapore-wide, not venue/time-specific or calibrated; it excludes current rainfall, future PSI and backup-site comparison. Numeric wind severity is not scored without a validated unit. Recheck closer to the event.
+4. Beyond four days, or if no fresh four-day outlook is available, the page explicitly says that no official forecast is currently available and does not show an estimate.
+5. For a covered event start, review the score, matched forecast window, source freshness and the note that current rainfall and unvalidated historical probability are excluded from this time-aligned score.
+6. If a backup venue is saved and precise event-time forecast coverage exists, select **Check backup venue**. RainReady compares scores only when both readings are current and the exact forecast-window boundaries match. This button/comparison is not available for a daily planning outlook.
+7. For covered event-start assessments, review the separate nearest-region 24-hour PSI advisory and inspect lightning observations as context only.
+8. To demonstrate the safety path, select **Confirm demo alert**, then run **Check live risk** again. The backend must return the stop-and-shelter override.
 
 Screenshot: expanded assessment showing routine breakdown, PSI advisory and either inactive or active lightning override.
 
@@ -43,6 +46,8 @@ Screenshot: decision form and notification preview, with no participant personal
 
 - Routine risk weights are RainReady prototype assumptions, not official NEA thresholds.
 - Historical probability `H` is excluded until validated event-matched data exist; remaining available weights are renormalised.
+- Event-time risk covers only the scheduled start, not the full activity duration. NEA's currently published forecast may not cover a future event; no score means manual review/recheck, not low risk.
+- The 24-hour forecast is regional; RainReady's region assignment is a prototype approximation. A lower backup-site weather score does not confirm that the venue is accessible, suitable, safe or available.
 - The PSI advisory follows published NEA 24-hour PSI bands but is not medical advice and is not included in the routine weather score.
 - Lightning observations are neither an official warning nor an all-clear. The stop-and-shelter path is activated only by an explicit organiser-confirmed demo alert.
 - Clearing an alert does not automatically resume an event; a human organiser reassesses and records the decision.
