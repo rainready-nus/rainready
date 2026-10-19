@@ -278,6 +278,8 @@ test("assessment endpoint combines source snapshot with requested sensitivity", 
     const client = await signUp(base, "organizer@example.com", "Test Club");
     const invalid = await apiFetch(base, client, "/api/assessment?latitude=1.3&longitude=103.8&sensitivity=extreme");
     assert.equal(invalid.status, 400);
+    const invalidActivity = await apiFetch(base, client, "/api/assessment?latitude=1.3&longitude=103.8&sensitivity=medium&activityType=unrecognised");
+    assert.equal(invalidActivity.status, 400);
     const response = await apiFetch(base, client, "/api/assessment?latitude=1.3&longitude=103.8&sensitivity=medium");
     const body = await response.json();
     assert.equal(response.status, 200);
@@ -294,6 +296,36 @@ test("assessment endpoint combines source snapshot with requested sensitivity", 
     assert.equal(override.status, 200);
     assert.equal(overrideBody.assessment.status, "override");
     assert.equal(overrideBody.assessment.recommendedAction, "stop_and_shelter");
+  });
+});
+
+test("assessment endpoint validates the scheduled SGT event start and returns its matched forecast window", async () => {
+  let received;
+  const snapshot = async (input) => {
+    received = input;
+    return {
+      location: { latitude: input.latitude, longitude: input.longitude },
+      sources: {
+        forecast: { data: { nearestArea: { forecast: "Cloudy", name: "University Town" }, validPeriod: { start: "2026-10-06T15:30:00+08:00", end: "2026-10-06T17:30:00+08:00" } }, freshness: { status: "current" } },
+        rainfall: { data: { unit: "mm", nearestStation: { value: 2, name: "Test station", distanceKm: 1 } }, freshness: { status: "current" } },
+        lightning: { data: { observations: [] }, freshness: { status: "current" } },
+        airQuality: { data: null, freshness: { status: "unavailable" } },
+      },
+    };
+  };
+  await withServer({ snapshot }, async (base) => {
+    const client = await signUp(base, "eventtime@example.com", "Event Time Club");
+    const invalid = await apiFetch(base, client, "/api/assessment?latitude=1.3&longitude=103.8&sensitivity=medium&eventDateTime=not-a-date");
+    assert.equal(invalid.status, 400);
+
+    const response = await apiFetch(base, client, "/api/assessment?latitude=1.3&longitude=103.8&sensitivity=medium&eventDateTime=2026-10-06T16%3A00");
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(received.latitude, 1.3);
+    assert.equal(body.assessment.window.mode, "scheduled_event_start");
+    assert.equal(body.assessment.window.status, "covered");
+    assert.equal(body.assessment.window.source, "NEA 2-hour local-area forecast");
+    assert.equal(body.assessment.inputs.rainfall, null);
   });
 });
 

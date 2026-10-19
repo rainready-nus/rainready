@@ -28,6 +28,38 @@ function fixtures() {
         }],
       },
     },
+    eventForecast: {
+      code: 0,
+      data: {
+        records: [{
+          timestamp: "2026-10-06T15:40:00+08:00",
+          updatedTimestamp: "2026-10-06T15:41:00+08:00",
+          general: { validPeriod: { start: "2026-10-06T15:00:00+08:00", end: "2026-10-07T15:00:00+08:00", text: "24-hour forecast" } },
+          periods: [
+            { timePeriod: { start: "2026-10-06T15:00:00+08:00", end: "2026-10-06T18:00:00+08:00", text: "3 pm to 6 pm" }, regions: { west: { code: "SH", text: "Showers" }, east: { code: "FA", text: "Fair" }, central: { code: "CL", text: "Cloudy" }, north: { code: "CL", text: "Cloudy" }, south: { code: "CL", text: "Cloudy" } } },
+            { timePeriod: { start: "2026-10-06T18:00:00+08:00", end: "2026-10-07T06:00:00+08:00", text: "6 pm to 6 am" }, regions: { west: { code: "CL", text: "Cloudy" } } },
+          ],
+        }],
+      },
+    },
+    fourDayOutlook: {
+      code: 0,
+      data: {
+        records: [{
+          date: "2026-10-06",
+          timestamp: "2026-10-06T15:40:00+08:00",
+          updatedTimestamp: "2026-10-06T15:41:00+08:00",
+          forecasts: [{
+            day: "Thursday",
+            timestamp: "2026-10-08T00:00:00+08:00",
+            forecast: { code: "TL", summary: "Afternoon thundery showers", text: "Thundery Showers" },
+            temperature: { low: 25, high: 34, unit: "Degrees Celsius" },
+            wind: { direction: "SE", speed: { low: 10, high: 20 } },
+            relativeHumidity: { low: 60, high: 95, unit: "Percentage" },
+          }],
+        }],
+      },
+    },
     rainfall: {
       code: 0,
       data: {
@@ -82,7 +114,7 @@ function fixtures() {
   };
 }
 
-test("fetches the four public sources and normalises weather, lightning and air-quality data", async () => {
+test("fetches the six public sources and normalises current, event-time, daily outlook, lightning and PSI", async () => {
   const payloads = fixtures();
   const fetchImpl = async (url) => {
     const name = Object.keys(DATA_ENDPOINTS).find((key) => DATA_ENDPOINTS[key] === url);
@@ -99,6 +131,13 @@ test("fetches the four public sources and normalises weather, lightning and air-
 
   assert.equal(result.sources.forecast.data.nearestArea.name, "Jurong West");
   assert.equal(result.sources.forecast.data.nearestArea.forecast, "Showers");
+  assert.equal(result.sources.eventForecast.data.region, "west");
+  assert.equal(result.sources.eventForecast.data.periods[0].text, "Showers");
+  assert.equal(result.sources.eventForecast.freshness.status, "current");
+  assert.equal(result.sources.fourDayOutlook.data.forecasts[0].date, "2026-10-08");
+  assert.equal(result.sources.fourDayOutlook.data.forecasts[0].temperature.high, 34);
+  assert.equal(result.sources.fourDayOutlook.data.forecasts[0].wind.speed.low, 10);
+  assert.equal(result.sources.fourDayOutlook.freshness.status, "current");
   assert.equal(result.sources.rainfall.data.nearestStation.id, "S218");
   assert.equal(result.sources.rainfall.data.nearestStation.value, 0.2);
   assert.equal(result.sources.rainfall.data.unit, "mm");

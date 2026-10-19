@@ -13,10 +13,11 @@ The repository contains a runnable local web application with a browser frontend
 1. Create an account or sign in to an organisation workspace.
 2. Create or edit an outdoor event.
 3. Search and select a Singapore venue through OneMap, or use a visibly labelled demo venue when OneMap is unavailable.
-4. Retrieve live NEA weather, rainfall, lightning-observation and 24-hour PSI data.
-5. Review an explainable routine weather score and a separate air-quality advisory.
-6. Confirm the demo lightning-alert override when demonstrating the stop-and-shelter path.
-7. Record an organiser decision and generate a test-only notification preview.
+4. Retrieve NEA weather forecasts matched to the saved event start, the four-day daily outlook, rainfall, lightning-observation and 24-hour PSI data.
+5. Review an explainable event-start weather score and separate air-quality advisory; for dates 2–4 days ahead outside precise forecast coverage, review a provisional daily planning estimate based on forecast wording, a prototype high-temperature band and sensitivity, with activity-aware preparation suggestions. It is not venue/time-specific or calibrated, excludes future PSI/current rainfall and does not compare sites. Beyond four days, the app reports no official forecast yet.
+6. Check a backup venue at the same start and compare only an exactly matching current precise forecast window.
+7. Confirm the demo lightning-alert override when demonstrating the stop-and-shelter path.
+8. Record an organiser decision and generate a test-only notification preview.
 
 Local event, decision, account and organisation data are stored in an ignored SQLite database. This is a course prototype and is intentionally bound to `127.0.0.1`; it is not production-ready or deployed to AWS.
 
@@ -32,6 +33,8 @@ Implemented in `frontend/index.html`:
 - main and backup venue coordinates saved through the backend;
 - labelled demo-venue fallback;
 - live-risk result display with source freshness and component explanations;
+- date-matched NEA four-day daily outlook for 2–4-day rough planning estimates and activity-aware suggestions, explicitly not an event-time score or backup-site comparison;
+- event-start forecast matching and an optional same-window primary/backup weather-score comparison;
 - separate PSI advisory display;
 - demo lightning-alert confirmation control;
 - organiser decision form, history and test notification preview;
@@ -43,7 +46,11 @@ The demonstration sequence and recommended screenshots are documented in `docs/u
 
 Implemented across `backend/weather-data.mjs`, `backend/risk-engine.mjs` and `backend/risk-assessment.mjs`:
 
-- retrieval and normalisation of NEA forecast, rainfall, lightning-observation and 24-hour PSI feeds;
+- retrieval and normalisation of NEA two-hour and 24-hour forecasts, four-day daily outlook, rainfall, lightning-observation and 24-hour PSI feeds;
+- event-start matching to a currently published forecast period (short-range local forecast first, regional 24-hour period second), including no-score/manual-review behavior outside forecast coverage;
+- a provisional daily, Singapore-wide estimate for dates 2–4 calendar days away when precise event-time coverage is not yet published; it uses mapped forecast wording, a prototype high-temperature band and event sensitivity, tailors advice by activity type, excludes current rainfall/future PSI/unvalidated historical probabilities, and never compares sites; dates beyond four days show no official forecast yet;
+- exclusion of latest five-minute rainfall from event-time scores because it describes current observations rather than the scheduled time;
+- same-window primary and backup venue assessment support with an explicitly non-operational comparison;
 - freshness metadata and graceful handling of unavailable readings;
 - routine weather component mappings for forecast, precipitation and event sensitivity;
 - exclusion of historical probability until suitable event-matched data exist;

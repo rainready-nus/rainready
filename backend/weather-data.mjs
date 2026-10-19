@@ -5,6 +5,8 @@
 
 export const DATA_ENDPOINTS = Object.freeze({
   forecast: "https://api-open.data.gov.sg/v2/real-time/api/two-hr-forecast",
+  eventForecast: "https://api-open.data.gov.sg/v2/real-time/api/twenty-four-hr-forecast",
+  fourDayOutlook: "https://api-open.data.gov.sg/v2/real-time/api/four-day-outlook",
   rainfall: "https://api-open.data.gov.sg/v2/real-time/api/rainfall",
   lightning: "https://api-open.data.gov.sg/v2/real-time/api/weather?api=lightning",
   airQuality: "https://api-open.data.gov.sg/v2/real-time/api/psi",
@@ -12,6 +14,8 @@ export const DATA_ENDPOINTS = Object.freeze({
 
 const FRESHNESS_LIMITS_MS = Object.freeze({
   forecast: 60 * 60 * 1000,
+  eventForecast: 9 * 60 * 60 * 1000,
+  fourDayOutlook: 13 * 60 * 60 * 1000,
   rainfall: 15 * 60 * 1000,
   lightning: 5 * 60 * 1000,
   airQuality: 90 * 60 * 1000,
@@ -114,6 +118,83 @@ function normalizeForecast(payload, target, retrievedAt) {
       forecast: forecast?.forecast ?? null,
     } : null,
     freshness: sourceStatus(observedAt, retrievedAt, "forecast"),
+  };
+}
+
+// NEA PSI region label locations are used as approximate representatives because
+// the 24-hour forecast is regional rather than venue-level. This is not a boundary polygon.
+const NEA_REGION_CENTRES = Object.freeze([
+  { name: "north", label_location: { latitude: 1.41803, longitude: 103.82 } },
+  { name: "south", label_location: { latitude: 1.29587, longitude: 103.82 } },
+  { name: "east", label_location: { latitude: 1.35735, longitude: 103.94 } },
+  { name: "west", label_location: { latitude: 1.35735, longitude: 103.7 } },
+  { name: "central", label_location: { latitude: 1.35735, longitude: 103.82 } },
+]);
+
+function normalizeEventForecast(payload, target, retrievedAt) {
+  const data = requireData(payload, "event forecast");
+  const record = latestNotFuture(data.records ?? [], (entry) => entry.updatedTimestamp ?? entry.timestamp, Date.parse(retrievedAt));
+  if (!record) throw new Error("24-hour forecast contains no usable record");
+  const nearest = nearestLocation(target, NEA_REGION_CENTRES, (region) => region.label_location);
+  if (!nearest) throw new Error("could not map venue to an NEA forecast region");
+  const region = nearest.candidate.name;
+  const periods = (record.periods ?? []).flatMap((period) => {
+    const forecast = period.regions?.[region];
+    const start = period.timePeriod?.start;
+    const end = period.timePeriod?.end;
+    if (typeof forecast?.text !== "string" || !Number.isFinite(Date.parse(start)) || !Number.isFinite(Date.parse(end))) return [];
+    return [{ start, end, label: period.timePeriod.text ?? null, text: forecast.text, code: forecast.code ?? null }];
+  });
+  const observedAt = record.timestamp ?? record.updatedTimestamp ?? null;
+  const updatedAt = record.updatedTimestamp ?? record.timestamp ?? null;
+  return {
+    observedAt,
+    updatedAt,
+    validPeriod: record.general?.validPeriod ?? null,
+    region,
+    regionDistanceKm: Number(nearest.distanceKm.toFixed(2)),
+    periods,
+    freshness: sourceStatus(updatedAt, retrievedAt, "eventForecast"),
+  };
+}
+
+function normalizeFourDayOutlook(payload, _target, retrievedAt) {
+  const data = requireData(payload, "4-day outlook");
+  const record = latestNotFuture(data.records ?? [], (entry) => entry.updatedTimestamp ?? entry.timestamp, Date.parse(retrievedAt));
+  if (!record) throw new Error("4-day outlook contains no usable record");
+  const forecasts = (record.forecasts ?? []).flatMap((entry) => {
+    const timestamp = entry.timestamp;
+    const date = typeof timestamp === "string" ? timestamp.slice(0, 10) : null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) return [];
+    const temperatureLow = Number(entry.temperature?.low);
+    const temperatureHigh = Number(entry.temperature?.high);
+    const windSpeedLow = Number(entry.wind?.speed?.low);
+    const windSpeedHigh = Number(entry.wind?.speed?.high);
+    const humidityLow = Number(entry.relativeHumidity?.low);
+    const humidityHigh = Number(entry.relativeHumidity?.high);
+    const range = (low, high) => Number.isFinite(low) && Number.isFinite(high) ? { low, high } : null;
+    return [{
+      date,
+      day: typeof entry.day === "string" ? entry.day : null,
+      timestamp,
+      summary: entry.forecast?.summary ?? entry.forecast?.text ?? null,
+      text: entry.forecast?.text ?? null,
+      temperature: range(temperatureLow, temperatureHigh),
+      temperatureUnit: entry.temperature?.unit ?? null,
+      wind: { direction: entry.wind?.direction ?? null, speed: range(windSpeedLow, windSpeedHigh), speedUnit: entry.wind?.speed?.unit ?? null },
+      relativeHumidity: range(humidityLow, humidityHigh),
+      relativeHumidityUnit: entry.relativeHumidity?.unit ?? null,
+    }];
+  });
+  if (!forecasts.length) throw new Error("4-day outlook contains no usable daily forecasts");
+  const observedAt = record.timestamp ?? record.updatedTimestamp ?? null;
+  const updatedAt = record.updatedTimestamp ?? record.timestamp ?? null;
+  return {
+    observedAt,
+    updatedAt,
+    forecasts,
+    scope: "Singapore-wide daily outlook; not venue-specific or time-of-day-specific",
+    freshness: sourceStatus(updatedAt, retrievedAt, "fourDayOutlook"),
   };
 }
 
@@ -279,12 +360,16 @@ export async function getWeatherSnapshot({
     location: target,
     sources: {
       forecast: processSource("forecast", normalizeForecast),
+      eventForecast: processSource("eventForecast", normalizeEventForecast),
+      fourDayOutlook: processSource("fourDayOutlook", normalizeFourDayOutlook),
       rainfall: processSource("rainfall", normalizeRainfall),
       lightning: processSource("lightning", normalizeLightning),
       airQuality: processSource("airQuality", normalizeAirQuality),
     },
     notes: [
       "Forecast and rainfall locations are represented by the nearest official area/station; inspect distanceKm before relying on them.",
+      "The 24-hour event forecast is regional; venue-to-region assignment uses nearest NEA PSI region label point as a prototype approximation, not an official boundary polygon.",
+      "The 4-day outlook is Singapore-wide and daily; it is for advance planning only, not a venue-specific or event-time forecast.",
       "Lightning observations are contextual data only; this module does not create official alerts or resume activities.",
       "Air-quality advice uses the nearest NEA reporting region and the reported 24-hour PSI; it is not a medical diagnosis.",
       "Freshness thresholds are prototype assumptions and should be reviewed against observed API latency.",
