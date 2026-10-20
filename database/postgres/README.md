@@ -12,9 +12,8 @@ This folder sits outside `backend/` on purpose: the schema is applied to RDS by 
 migration step, not shipped inside the Node app, and `backend/data/` is ignored by Git. The
 future PostgreSQL storage adapter (`event-store-pg.mjs`) does belong in `backend/`.
 
-> **Status.** The app still runs on SQLite. Nothing here changes `npm start` or `npm test`.
-> Switching the backend to PostgreSQL needs a new storage adapter (see "Next step" below).
-> None of these scripts has been run yet: review them, then start the database yourself.
+> **Status.** The app uses SQLite by default. Set `RAINREADY_DB_DRIVER=postgres` in the root
+> `.env` to run it on this database instead (see "Connecting the backend" below).
 
 ## Files
 
@@ -92,17 +91,17 @@ docker compose exec db rm /tmp/import.sql
 
 The export opens SQLite read-only and the load is one transaction, so a failure leaves PostgreSQL unchanged.
 
-## Next step: a PostgreSQL storage adapter
+## Connecting the backend
 
-`createEventStore()` returns async event methods but **synchronous** `auth` methods, and
-`auth.mjs` and `server.mjs` call those synchronously. A PostgreSQL client is always async, so:
+`backend/event-store-pg.mjs` is the PostgreSQL storage adapter. It has the same interface as
+the SQLite store, connects as `rainready_app`, and runs each event query in a transaction that
+sets `app.organization_id`, so row-level security applies. To use it:
 
-1. Add the `pg` package (the project's first npm dependency; agree this as a team).
-2. Make `auth.mjs` and the auth calls in `server.mjs` `await` the store.
-3. Write `backend/event-store-pg.mjs` with the same interface, choose it with an env var
-   such as `RAINREADY_DB_DRIVER=postgres`, and connect as `rainready_app`.
-4. In each request, run queries in a transaction that first calls
-   `set_config('app.organization_id', <verified org id>, true)` and `set_config('app.actor', <user id>, true)`.
-5. In `createAccount()`, replace the `UPDATE events ... 'legacy'` statement with
-   `SELECT claim_legacy_events($1)`.
-6. Run the existing `npm test` suite against both stores.
+1. `npm install pg` in the repository root.
+2. In the root `.env`: `RAINREADY_DB_DRIVER=postgres` and the `RAINREADY_DB_*` settings from
+   `.env.example` (`RAINREADY_DB_PASSWORD` = `APP_DB_PASSWORD` from this folder's `.env`).
+3. `npm test` (normal suite; PostgreSQL tests skipped), then `npm run test:pg`.
+4. `npm start` and use the app; data now goes to PostgreSQL.
+
+For RDS, point `RAINREADY_DB_HOST`/`RAINREADY_DB_PORT` at the tunnel and set
+`RAINREADY_DB_SSL=verify-ca` with `RAINREADY_DB_SSL_CA` set to the RDS certificate bundle.

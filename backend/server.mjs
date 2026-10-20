@@ -12,10 +12,25 @@ import { AuthError, createAuthService, clearedSessionCookie, hashToken, readSess
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendPath = path.join(root, "frontend", "index.html");
 assertLocalPrototypeSafeEnvironment();
-const eventStore = createEventStore({
-  databasePath: process.env.RAINREADY_DB_FILE || path.join(root, "backend", "data", "rainready.sqlite"),
-  legacyFilePath: process.env.RAINREADY_LEGACY_DATA_FILE || path.join(root, "backend", "data", "events.json"),
-});
+
+/**
+ * RAINREADY_DB_DRIVER selects the store: "sqlite" (default) or "postgres".
+ * The PostgreSQL adapter (and the `pg` package) is only loaded when it is selected,
+ * so the SQLite setup keeps working without any npm dependencies.
+ */
+export async function createConfiguredStore(environment = process.env) {
+  const driver = (environment.RAINREADY_DB_DRIVER || "sqlite").toLowerCase();
+  if (driver === "postgres") {
+    const { createPgEventStore, pgConfigFromEnv } = await import("./event-store-pg.mjs");
+    return createPgEventStore(pgConfigFromEnv(environment));
+  }
+  if (driver !== "sqlite") throw new Error(`RAINREADY_DB_DRIVER must be sqlite or postgres, not "${driver}"`);
+  return createEventStore({
+    databasePath: environment.RAINREADY_DB_FILE || path.join(root, "backend", "data", "rainready.sqlite"),
+    legacyFilePath: environment.RAINREADY_LEGACY_DATA_FILE || path.join(root, "backend", "data", "events.json"),
+  });
+}
+const eventStore = await createConfiguredStore();
 
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
@@ -57,13 +72,13 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
   assertLocalPrototypeSafeEnvironment();
   const auth = createAuthService(store.auth);
   const allowedOrigins = (process.env.RAINREADY_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
-  const currentSession = (request) => auth.resolveSession(readSessionCookie(request));
-  const organizationContext = (request, session) => {
+  const currentSession = async (request) => auth.resolveSession(readSessionCookie(request));
+  const organizationContext = async (request, session) => {
     const organizationId = request.headers["x-rainready-organization"];
     if (typeof organizationId !== "string" || !organizationId) {
       return { error: new AuthError(400, "organization_required", "Select an organization before using RainReady.") };
     }
-    const organization = auth.membership(session.user.id, organizationId);
+    const organization = await auth.membership(session.user.id, organizationId);
     if (!organization) return { error: new AuthError(403, "organization_access_denied", "You are not a member of this organization.") };
     return { organization };
   };
@@ -78,7 +93,7 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
     }
     catch { return false; }
   };
-  return createHttpServer(async (request, response) => {
+  const handleRequest = async (request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
     if (request.method === "GET" && url.pathname === "/health") {
       return sendJson(response, 200, {
@@ -91,7 +106,7 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
     if (request.method === "POST" && ["/api/auth/register", "/api/auth/login"].includes(url.pathname)) {
       const isRegister = url.pathname.endsWith("register");
       const bucket = `${isRegister ? "register" : "login"}:${request.socket.remoteAddress ?? "local"}`;
-      const limit = store.auth.consumeRateLimit({
+      const limit = await store.auth.consumeRateLimit({
         keyHash: hashToken(bucket), now: Date.now(), windowMs: 15 * 60 * 1000, maxAttempts: isRegister ? 5 : 10,
       });
       if (!limit.allowed) {
@@ -101,7 +116,7 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
       if (!sameOriginMutation(request)) return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
       try {
         const body = await readJsonBody(request);
-        const result = isRegister ? auth.register(body) : auth.login(body);
+        const result = isRegister ? await auth.register(body) : await auth.login(body);
         response.setHeader("set-cookie", sessionCookie(result.session.token, request));
         return sendJson(response, isRegister ? 201 : 200, {
           user: result.user,
@@ -117,38 +132,38 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
 
     if (url.pathname === "/api/auth/logout" && request.method === "POST") {
       if (!sameOriginMutation(request)) return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
-      auth.logout(readSessionCookie(request));
+      await auth.logout(readSessionCookie(request));
       response.writeHead(204, { "set-cookie": clearedSessionCookie(request), "cache-control": "no-store" });
       return response.end();
     }
 
     if (url.pathname === "/api/auth/logout-all" && request.method === "POST") {
       if (!sameOriginMutation(request)) return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
-      const session = currentSession(request);
+      const session = await currentSession(request);
       if (!session) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
-      auth.logoutAll(session.user.id);
+      await auth.logoutAll(session.user.id);
       response.writeHead(204, { "set-cookie": clearedSessionCookie(request), "cache-control": "no-store" });
       return response.end();
     }
 
     if (url.pathname === "/api/auth/me" && request.method === "GET") {
-      const session = currentSession(request);
+      const session = await currentSession(request);
       if (!session) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
       return sendJson(response, 200, {
         user: session.user,
-        organizations: store.auth.listMemberships(session.user.id),
+        organizations: await store.auth.listMemberships(session.user.id),
         expiresAt: session.expiresAt,
       });
     }
 
     if (url.pathname === "/api/auth/invitations" && request.method === "POST") {
       if (!sameOriginMutation(request)) return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
-      const session = currentSession(request);
+      const session = await currentSession(request);
       if (!session) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
-      const context = organizationContext(request, session);
+      const context = await organizationContext(request, session);
       if (context.error) return sendJson(response, context.error.status, { error: context.error.code, message: context.error.message });
       try {
-        const invitation = auth.createInvitation({ userId: session.user.id, organizationId: context.organization.id });
+        const invitation = await auth.createInvitation({ userId: session.user.id, organizationId: context.organization.id });
         return sendJson(response, 201, invitation);
       } catch (error) {
         if (error instanceof AuthError) return sendJson(response, error.status, { error: error.code, message: error.message });
@@ -157,12 +172,12 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
     }
 
     if (url.pathname === "/api/auth/members" && request.method === "GET") {
-      const session = currentSession(request);
+      const session = await currentSession(request);
       if (!session) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
-      const context = organizationContext(request, session);
+      const context = await organizationContext(request, session);
       if (context.error) return sendJson(response, context.error.status, { error: context.error.code, message: context.error.message });
       try {
-        return sendJson(response, 200, { members: auth.listMembers({ userId: session.user.id, organizationId: context.organization.id }) });
+        return sendJson(response, 200, { members: await auth.listMembers({ userId: session.user.id, organizationId: context.organization.id }) });
       } catch (error) {
         if (error instanceof AuthError) return sendJson(response, error.status, { error: error.code, message: error.message });
         return sendJson(response, 500, { error: "member_list_error", message: "RainReady could not load organisation members." });
@@ -172,15 +187,15 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
     const memberRoute = url.pathname.match(/^\/api\/auth\/members\/([^/]+)$/);
     if (memberRoute && request.method === "DELETE") {
       if (!sameOriginMutation(request)) return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
-      const session = currentSession(request);
+      const session = await currentSession(request);
       if (!session) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
-      const context = organizationContext(request, session);
+      const context = await organizationContext(request, session);
       if (context.error) return sendJson(response, context.error.status, { error: context.error.code, message: context.error.message });
       let targetUserId;
       try { targetUserId = decodeURIComponent(memberRoute[1]); }
       catch { return sendJson(response, 400, { error: "invalid_member", message: "Select a valid organisation member." }); }
       try {
-        auth.removeMember({ userId: session.user.id, organizationId: context.organization.id, targetUserId });
+        await auth.removeMember({ userId: session.user.id, organizationId: context.organization.id, targetUserId });
         return sendJson(response, 200, { removed: true, sessionsRevoked: true });
       } catch (error) {
         if (error instanceof AuthError) return sendJson(response, error.status, { error: error.code, message: error.message });
@@ -191,9 +206,9 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
     let session = null;
     let activeOrganization = null;
     if (url.pathname.startsWith("/api/")) {
-      session = currentSession(request);
+      session = await currentSession(request);
       if (!session) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
-      const context = organizationContext(request, session);
+      const context = await organizationContext(request, session);
       if (context.error) return sendJson(response, context.error.status, { error: context.error.code, message: context.error.message });
       activeOrganization = context.organization;
       if (["POST", "PATCH", "PUT", "DELETE"].includes(request.method ?? "") && !sameOriginMutation(request)) {
@@ -370,6 +385,15 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
     }
 
     return sendJson(response, 404, { error: "not_found" });
+  };
+  // Any unexpected failure (for example the database being unreachable) becomes a 500
+  // response instead of an unhandled promise rejection that would stop the server.
+  return createHttpServer((request, response) => {
+    handleRequest(request, response).catch((error) => {
+      console.error("RainReady request failed:", error);
+      if (!response.headersSent) sendJson(response, 500, { error: "internal_error", message: "RainReady could not complete the request." });
+      else response.end();
+    });
   });
 }
 
