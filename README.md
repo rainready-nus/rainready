@@ -38,6 +38,10 @@ The default database is `backend/data/rainready.sqlite` and is ignored by Git. I
 
 SQLite here is for a single-machine prototype, not a hardened production database. It is not automatically encrypted or backed up. The app stores a participant **count only**, not names, emails, phone numbers or other participant personal data.
 
+## PostgreSQL database (local baseline; app not switched yet)
+
+[`database/postgres/`](database/postgres/README.md) holds a local PostgreSQL 16 + PostGIS database in Docker with the same tables as the SQLite store, plus row-level security per organisation, append-only decisions and previews, stored risk assessments, organiser-confirmed lightning alerts (no `continue` until an all-clear is recorded), data-source freshness and an audit log. `npm run db:export` copies existing SQLite data into a PostgreSQL load script without modifying the SQLite file. The backend still uses SQLite until a PostgreSQL storage adapter is added; the steps are listed in that folder's README. This is also the schema intended for RDS PostgreSQL later.
+
 ## Cloud deployment direction (not implemented; public mode is blocked)
 
 The local app/database are not deployed. A likely AWS prototype architecture is a static frontend on S3 + CloudFront, an API on API Gateway + Lambda, and managed application storage on Amazon RDS for PostgreSQL. Production identity should move to Amazon Cognito (or another reviewed identity provider), with backend verification and server-side organisation membership checks. Scheduled ingestion/monitoring can be evaluated with EventBridge and CloudWatch. This is a future migration plan—not a claim that AWS resources or cloud persistence are already running. Confirm course-account permissions, quotas and cost before provisioning. The current local password/session implementation is not approved for public or AWS exposure. Setting `RAINREADY_PUBLIC_DEPLOYMENT=true` intentionally causes the local server to fail at startup; this is a guardrail, not a production mode switch.

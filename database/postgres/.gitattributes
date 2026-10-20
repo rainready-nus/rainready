@@ -1,0 +1,4 @@
+# The container runs these with Linux tools; Windows CRLF line endings break 00_roles.sh.
+*.sh  text eol=lf
+*.sql text eol=lf
+*.yml text eol=lf

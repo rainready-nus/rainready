@@ -50,23 +50,25 @@ function verifyPassword(password, encoded) {
   }
 }
 
-function publicMemberships(authStore, userId) {
-  return authStore.listMemberships(userId).map(({ id, name, role }) => ({ id, name, role }));
+// Every store call is awaited, so the same service works with the synchronous SQLite store
+// (event-store.mjs) and the asynchronous PostgreSQL store (event-store-pg.mjs).
+async function publicMemberships(authStore, userId) {
+  return (await authStore.listMemberships(userId)).map(({ id, name, role }) => ({ id, name, role }));
 }
 
 export function createAuthService(authStore) {
   if (!authStore) throw new TypeError("authStore is required");
 
-  function createSession(userId) {
+  async function createSession(userId) {
     const token = randomBytes(32).toString("base64url");
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SESSION_LIFETIME_MS).toISOString();
-    authStore.createSession({ tokenHash: hashToken(token), userId, expiresAt, now: now.toISOString() });
+    await authStore.createSession({ tokenHash: hashToken(token), userId, expiresAt, now: now.toISOString() });
     return { token, expiresAt };
   }
 
   return {
-    register({ email: emailInput, password: passwordInput, organizationName: orgInput, invitationCode: inviteInput }) {
+    async register({ email: emailInput, password: passwordInput, organizationName: orgInput, invitationCode: inviteInput }) {
       const email = validateEmail(emailInput);
       const password = validatePassword(passwordInput);
       const invitationCode = typeof inviteInput === "string" ? inviteInput.trim() : "";
@@ -81,7 +83,7 @@ export function createAuthService(authStore) {
       const invitationTokenHash = invitationCode ? hashToken(invitationCode) : null;
       let account;
       try {
-        account = authStore.createAccount({
+        account = await authStore.createAccount({
           userId: randomUUID(),
           email,
           passwordHash: passwordHash(password),
@@ -95,59 +97,59 @@ export function createAuthService(authStore) {
         if (error.code === "invalid_invitation") throw new AuthError(400, error.code, error.message);
         throw error;
       }
-      return { user: { id: account.id, email: account.email }, organizations: publicMemberships(authStore, account.id), session: createSession(account.id) };
+      return { user: { id: account.id, email: account.email }, organizations: await publicMemberships(authStore, account.id), session: await createSession(account.id) };
     },
-    login({ email: emailInput, password: passwordInput }) {
+    async login({ email: emailInput, password: passwordInput }) {
       const email = validateEmail(emailInput);
       if (typeof passwordInput !== "string" || passwordInput.length > 128) {
         throw new AuthError(400, "invalid_credentials", "Email or password is incorrect.");
       }
-      const account = authStore.findUserByEmail(email);
+      const account = await authStore.findUserByEmail(email);
       const valid = verifyPassword(passwordInput, account?.password_hash ?? "scrypt$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
       if (!account || !valid) throw new AuthError(401, "invalid_credentials", "Email or password is incorrect.");
-      return { user: { id: account.id, email: account.email }, organizations: publicMemberships(authStore, account.id), session: createSession(account.id) };
+      return { user: { id: account.id, email: account.email }, organizations: await publicMemberships(authStore, account.id), session: await createSession(account.id) };
     },
-    resolveSession(token) {
+    async resolveSession(token) {
       if (typeof token !== "string" || token.length < 40 || token.length > 100) return null;
       const now = new Date().toISOString();
-      const session = authStore.getSession(hashToken(token), now);
+      const session = await authStore.getSession(hashToken(token), now);
       if (!session) return null;
       return { user: { id: session.user_id, email: session.email }, expiresAt: session.expires_at };
     },
-    logout(token) {
-      if (typeof token === "string" && token.length >= 40 && token.length <= 100) authStore.deleteSession(hashToken(token));
+    async logout(token) {
+      if (typeof token === "string" && token.length >= 40 && token.length <= 100) await authStore.deleteSession(hashToken(token));
     },
-    logoutAll(userId) {
+    async logoutAll(userId) {
       return authStore.deleteUserSessions(userId);
     },
-    membership(userId, organizationId) {
+    async membership(userId, organizationId) {
       if (typeof organizationId !== "string" || organizationId.length > 80) return null;
       return authStore.getMembership(userId, organizationId);
     },
-    createInvitation({ userId, organizationId }) {
-      const membership = authStore.getMembership(userId, organizationId);
+    async createInvitation({ userId, organizationId }) {
+      const membership = await authStore.getMembership(userId, organizationId);
       if (!membership) throw new AuthError(403, "organization_access_denied", "You are not a member of this organization.");
       if (membership.role !== "owner") throw new AuthError(403, "owner_required", "Only an organization owner can invite members.");
       const code = randomBytes(32).toString("base64url");
       const now = new Date();
       const expiresAt = new Date(now.getTime() + INVITATION_LIFETIME_MS).toISOString();
-      authStore.createInvitation({ tokenHash: hashToken(code), organizationId, createdByUserId: userId, expiresAt, now: now.toISOString() });
+      await authStore.createInvitation({ tokenHash: hashToken(code), organizationId, createdByUserId: userId, expiresAt, now: now.toISOString() });
       return { code, expiresAt, organizationName: membership.name };
     },
-    listMembers({ userId, organizationId }) {
-      const membership = authStore.getMembership(userId, organizationId);
+    async listMembers({ userId, organizationId }) {
+      const membership = await authStore.getMembership(userId, organizationId);
       if (!membership) throw new AuthError(403, "organization_access_denied", "You are not a member of this organization.");
       if (membership.role !== "owner") throw new AuthError(403, "owner_required", "Only an organization owner can manage members.");
       return authStore.listOrganizationMembers(organizationId);
     },
-    removeMember({ userId, organizationId, targetUserId }) {
-      const membership = authStore.getMembership(userId, organizationId);
+    async removeMember({ userId, organizationId, targetUserId }) {
+      const membership = await authStore.getMembership(userId, organizationId);
       if (!membership) throw new AuthError(403, "organization_access_denied", "You are not a member of this organization.");
       if (membership.role !== "owner") throw new AuthError(403, "owner_required", "Only an organization owner can manage members.");
       if (typeof targetUserId !== "string" || targetUserId.length > 80) {
         throw new AuthError(400, "invalid_member", "Select a valid organisation member.");
       }
-      if (!authStore.removeOrganizationMember({ actorUserId: userId, organizationId, targetUserId })) {
+      if (!(await authStore.removeOrganizationMember({ actorUserId: userId, organizationId, targetUserId }))) {
         throw new AuthError(400, "member_not_removable", "This member cannot be removed. Owners cannot be removed through this screen.");
       }
       return { removed: true };

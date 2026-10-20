@@ -1,0 +1,28 @@
+# RainReady local PostgreSQL (on-premise baseline / future RDS schema).
+# Nothing runs until a team member starts it:  docker compose up -d   (see README.md here)
+services:
+  db:
+    image: postgis/postgis:16-3.4      # PostgreSQL 16 + PostGIS (event location column)
+    container_name: rainready-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: rainready
+      POSTGRES_USER: rainready_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in database/postgres/.env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in database/postgres/.env}
+      TZ: Asia/Singapore
+      PGTZ: Asia/Singapore
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"   # loopback only, like the Node server
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro       # runs once, on first start with an empty volume
+      - ./tests:/tests:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rainready_admin -d rainready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
