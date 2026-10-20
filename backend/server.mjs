@@ -99,6 +99,7 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
       return sendJson(response, 200, {
         status: "ok",
         version: "0.5.0",
+        storage: store.driver || "sqlite",
         checkedAt: new Date().toISOString(),
       });
     }

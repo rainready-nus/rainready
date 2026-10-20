@@ -20,6 +20,12 @@
     @media(max-width:1050px){.app{grid-template-columns:210px 1fr}.event-card{grid-template-columns:minmax(180px,1.1fr) minmax(120px,.7fr) minmax(140px,.8fr) auto}.event-card .risk-detail{display:none}.metrics{grid-template-columns:repeat(2,1fr)}}
     @media(max-width:760px){.app{grid-template-columns:1fr}aside{padding:13px 15px;gap:13px}.brand{padding:0 4px}.org-switch,.nav-label,.aside-bottom{display:none}.nav{display:flex;overflow:auto}.nav button{white-space:nowrap;padding:8px 10px}.nav button:not(.active){display:none}.topbar{height:auto;min-height:60px;flex-wrap:wrap;gap:8px;padding:8px 17px}.top-actions{width:100%;justify-content:flex-end;flex-wrap:wrap}.content{padding:23px 16px 36px}.welcome{align-items:flex-start}.welcome h1{font-size:22px}.welcome .primary{padding:9px 11px;font-size:12px}.alert-banner{align-items:flex-start}.metrics{gap:9px}.metric{padding:13px}.metric-value{font-size:22px}.event-card{grid-template-columns:1fr auto;gap:12px;padding:14px}.event-card .event-meta,.event-card .risk-detail{display:none}.event-action{grid-column:1/-1;justify-content:flex-start}.event-action button{flex:1}.lower-grid{grid-template-columns:1fr}.source-grid{grid-template-columns:1fr}.filters{display:none}}
     @media(max-width:430px){.demo-pill{display:none}.workspace-select{max-width:120px;font-size:10px}.top-actions .secondary{font-size:10px;padding:7px 8px}.welcome{display:block}.welcome .primary{margin-top:12px}.form-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.alert-banner{font-size:12px}.alert-banner .text-btn{font-size:10px}}
+      .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 14px}.toolbar input,.toolbar select{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:#fff;color:var(--ink)}.toolbar input{flex:1 1 220px;min-width:0}.toolbar .count{margin-left:auto;color:var(--muted);font-size:12px}
+    .table-wrap{padding:0;overflow-x:auto}.data-table{width:100%;border-collapse:collapse;font-size:12px}.data-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:#87938c;font-weight:650;padding:12px 14px;border-bottom:1px solid var(--line);white-space:nowrap}.data-table td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}.data-table tr:last-child td{border-bottom:0}.data-table td b{font-weight:650}.data-table td small{display:block;color:var(--muted);font-size:11px;margin-top:2px}.data-table .reason{max-width:340px;white-space:pre-wrap}.row-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}.row-actions .secondary{font-size:11px;padding:6px 9px;white-space:nowrap}
+    .pill{display:inline-block;border-radius:20px;padding:3px 8px;font-size:11px;font-weight:700;background:#eef0ef;color:#4e6056;white-space:nowrap}.pill.low,.pill.continue{background:#e7f4eb;color:#267249}.pill.medium,.pill.prepare{background:var(--amber-bg);color:#98600a}.pill.high,.pill.postpone{background:#fff0e8;color:#b45623}.pill.relocate{background:var(--blue-bg);color:var(--blue)}.pill.cancel{background:var(--red-bg);color:#ad3934}
+    .chip-row{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.chip-row .pill{font-size:12px;padding:5px 10px}
+    .settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.kv{display:grid;grid-template-columns:150px minmax(0,1fr);gap:9px 12px;font-size:13px;margin:0}.kv dt{color:var(--muted)}.kv dd{margin:0;overflow-wrap:anywhere}.member-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}.member-row:last-child{border-bottom:0}.member-row small{display:block;color:var(--muted);font-size:11px}.settings-actions{display:flex;gap:8px;flex-wrap:wrap}.muted-note{color:var(--muted);font-size:12px;margin:10px 0 0}
+    @media(max-width:760px){.nav button:not(.active){display:flex}.settings-grid{grid-template-columns:1fr}.kv{grid-template-columns:1fr;gap:2px 0}.kv dd{margin-bottom:8px}.toolbar .count{margin-left:0}}
   </style>
 </head>
 <body>
@@ -27,12 +33,13 @@
     <aside>
       <div class="brand"><div class="brand-mark">R</div><div><div class="brand-name">RainReady</div><div class="brand-sub">Outdoor event safety desk</div></div></div>
       <div class="org-switch"><small>WORKSPACE</small>NUS Student Organisations　⌄</div>
-      <div><div class="nav-label">Workspace</div><nav class="nav"><button class="active"><span class="ico">▦</span>Overview</button><button title="Coming in the next milestone"><span class="ico">▣</span>Events</button><button title="Coming in the next milestone"><span class="ico">◷</span>Decision history</button><button title="Coming in the next milestone"><span class="ico">⚙</span>Settings</button></nav></div>
+      <div><div class="nav-label">Workspace</div><nav class="nav"><button type="button" class="active" data-view="overview" aria-current="page"><span class="ico">▦</span>Overview</button><button type="button" data-view="events"><span class="ico">▣</span>Events</button><button type="button" data-view="decisions"><span class="ico">◷</span>Decision history</button><button type="button" data-view="settings"><span class="ico">⚙</span>Settings</button></nav></div>
       <div class="aside-bottom">Safety decisions remain with the event organiser.<div class="profile"><div class="avatar">RR</div><div><b id="currentUserEmail">Signed out</b><small id="currentUserRole">Organisation member</small></div></div></div>
     </aside>
     <main>
-      <header class="topbar"><div class="crumb">Workspace　/　<b>Overview</b></div><div class="top-actions"><span class="demo-pill">DEMO DATA · TEST NOTIFICATIONS ONLY</span><select id="organizationSelect" class="workspace-select" aria-label="Active organization"></select><button class="secondary" type="button" id="inviteMemberButton" hidden>Invite member</button><button class="secondary" type="button" id="manageMembersButton" hidden>Manage members</button><button class="secondary" type="button" id="signOutEverywhereButton" title="End all sessions for this account">Sign out all devices</button><button class="secondary" type="button" id="signOutButton">Sign out</button></div></header>
+      <header class="topbar"><div class="crumb">Workspace　/　<b id="crumbView">Overview</b></div><div class="top-actions"><span class="demo-pill">DEMO DATA · TEST NOTIFICATIONS ONLY</span><select id="organizationSelect" class="workspace-select" aria-label="Active organization"></select><button class="secondary" type="button" id="inviteMemberButton" hidden>Invite member</button><button class="secondary" type="button" id="manageMembersButton" hidden>Manage members</button><button class="secondary" type="button" id="signOutEverywhereButton" title="End all sessions for this account">Sign out all devices</button><button class="secondary" type="button" id="signOutButton">Sign out</button></div></header>
       <div class="content">
+        <div id="view-overview" data-view-panel="overview">
         <div class="welcome"><div><h1 id="greetingHeading">Good morning, organiser</h1><p>Here’s your outdoor event safety overview for the next 24 hours.</p></div><button class="primary" id="addEventBtn">＋　Add event</button></div>
 
         <div class="alert-banner" id="lightningBanner"><div class="alert-left"><div class="alert-icon">ϟ</div><div><strong id="lightningTitle">Lightning override: no confirmed demo alert</strong><small id="lightningText">NEA observations remain visible as context, but are not treated as an official warning or all-clear.</small></div></div><button class="text-btn" id="lightningToggle">Confirm demo alert</button></div>
@@ -55,6 +62,30 @@
             <div class="source-card"><div class="source-name">Venue coordinates <span class="source-state">OneMap search</span></div><p>Organisers search by place/address and select a matching result before saving its coordinates.</p></div>
           </div></section>
           <section class="panel"><div class="panel-head"><div><h2>Recent activity</h2><p>Local activity log; decision records are saved with each event.</p></div><button class="secondary" id="clearLogBtn">Clear demo log</button></div><div class="log" id="activityLog"></div></section>
+        </div>
+        </div>
+
+        <div id="view-events" data-view-panel="events" hidden>
+          <div class="welcome"><div><h1>Events</h1><p>Every event in this organisation, with its latest organiser decision.</p></div><button class="primary" type="button" id="eventsAddButton">＋　Add event</button></div>
+          <div class="toolbar"><input id="eventsSearch" type="search" placeholder="Search by event, venue or activity type" aria-label="Search events" /><select id="eventsWhen" aria-label="Date range"><option value="upcoming">Upcoming</option><option value="past">Past</option><option value="all">All dates</option></select><select id="eventsSensitivity" aria-label="Weather sensitivity"><option value="">All sensitivities</option><option value="high">High sensitivity</option><option value="medium">Medium sensitivity</option><option value="low">Low sensitivity</option></select><span class="count" id="eventsCount"></span></div>
+          <section class="panel table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Date and time</th><th>Venue</th><th>Participants</th><th>Sensitivity</th><th>Latest decision</th><th></th></tr></thead><tbody id="eventsTableBody"></tbody></table></section>
+        </div>
+
+        <div id="view-decisions" data-view-panel="decisions" hidden>
+          <div class="welcome"><div><h1>Decision history</h1><p>Every organiser decision in this organisation, newest first. Decisions are kept as a record and cannot be edited.</p></div><button class="secondary" type="button" id="decisionsCsvButton">Download CSV</button></div>
+          <div class="chip-row" id="decisionSummary" aria-label="Decisions by type"></div>
+          <div class="toolbar"><input id="decisionsSearch" type="search" placeholder="Search by event or reason" aria-label="Search decisions" /><select id="decisionsAction" aria-label="Decision type"><option value="">All decisions</option><option value="continue">Continue</option><option value="prepare">Prepare contingency</option><option value="relocate">Relocate</option><option value="postpone">Postpone</option><option value="cancel">Cancel</option></select><span class="count" id="decisionsCount"></span></div>
+          <section class="panel table-wrap"><table class="data-table"><thead><tr><th>Decided</th><th>Event</th><th>Decision</th><th>Reason</th><th>Notification</th></tr></thead><tbody id="decisionsTableBody"></tbody></table></section>
+        </div>
+
+        <div id="view-settings" data-view-panel="settings" hidden>
+          <div class="welcome"><div><h1>Settings</h1><p>Your workspace, its members and your sign-in sessions.</p></div></div>
+          <div class="settings-grid">
+            <section class="panel"><div class="panel-head"><div><h2>Workspace</h2><p>The organisation you are working in now.</p></div></div><dl class="kv"><dt>Organisation</dt><dd id="settingsOrgName">—</dd><dt>Your role</dt><dd id="settingsRole">—</dd><dt>Signed in as</dt><dd id="settingsEmail">—</dd><dt>Organisation ID</dt><dd id="settingsOrgId">—</dd><dt>Database</dt><dd id="settingsStorage">Checking…</dd><dt>App version</dt><dd id="settingsVersion">—</dd></dl></section>
+            <section class="panel"><div class="panel-head"><div><h2>Members</h2><p>People who can see and change this organisation's events.</p></div><button class="secondary" type="button" id="settingsInviteButton" hidden>Invite member</button></div><div id="settingsMembers" aria-live="polite"></div><p class="muted-note" id="settingsMembersNote"></p></section>
+            <section class="panel"><div class="panel-head"><div><h2>Sessions</h2><p>Sessions last 12 hours. Signing out everywhere ends every session for your account.</p></div></div><div class="settings-actions"><button class="secondary" type="button" id="settingsSignOut">Sign out</button><button class="secondary" type="button" id="settingsSignOutAll">Sign out all devices</button></div></section>
+            <section class="panel"><div class="panel-head"><div><h2>This browser</h2><p>Kept only in this browser, not in the database.</p></div></div><dl class="kv"><dt>Activity log</dt><dd id="settingsLogCount">—</dd><dt>Demo lightning alert</dt><dd id="settingsLightning">—</dd></dl><div class="settings-actions" style="margin-top:14px"><button class="secondary" type="button" id="settingsClearLog">Clear activity log</button></div></section>
+          </div>
         </div>
         <div class="footer-note">RainReady is a course-project prototype. Sample scores are illustrative and must not be used for real event safety decisions.</div>
       </div>
@@ -162,6 +193,133 @@
     $("#eventForm").addEventListener("submit",saveEvent);
     $("#decisionForm").addEventListener("submit",saveDecision);
     $("#clearLogBtn").addEventListener("click",()=>{logs=[];render();toast("Activity log cleared for this organisation in this browser.")});updateSingaporeGreeting();setInterval(updateSingaporeGreeting,60_000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)updateSingaporeGreeting()});setAuthMode("login");initializeAuth();
+  </script>
+  <script>
+    // Workspace navigation: Overview, Events, Decision history and Settings.
+    // Reuses the globals above (events, authState, api, render, openModal, decisionFor, addLog, toast).
+    const VIEW_TITLES={overview:"Overview",events:"Events",decisions:"Decision history",settings:"Settings"};
+    let activeView="overview";let settingsLoadedFor=null;let serverInfo=null;
+    const DECISION_NAMES={continue:"Continue",prepare:"Prepare contingency",relocate:"Relocate",postpone:"Postpone",cancel:"Cancel"};
+    const todaySgt=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Singapore"}).format(new Date());
+    const formatDateTime=value=>new Date(value).toLocaleString("en-SG",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Singapore"});
+    const latestDecision=event=>(Array.isArray(event.decisions)&&event.decisions.length)?event.decisions[event.decisions.length-1]:null;
+
+    function showView(name,{updateHash=true}={}){
+      activeView=VIEW_TITLES[name]?name:"overview";
+      document.querySelectorAll("[data-view-panel]").forEach(panel=>{panel.hidden=panel.dataset.viewPanel!==activeView});
+      document.querySelectorAll(".nav button[data-view]").forEach(button=>{const on=button.dataset.view===activeView;button.classList.toggle("active",on);if(on)button.setAttribute("aria-current","page");else button.removeAttribute("aria-current")});
+      $("#crumbView").textContent=VIEW_TITLES[activeView];
+      if(updateHash){try{history.replaceState(null,"",activeView==="overview"?location.pathname:`#${activeView}`)}catch{}}
+      if(activeView==="settings")loadSettings();
+      renderActiveView();window.scrollTo(0,0);
+    }
+    document.querySelectorAll(".nav button[data-view]").forEach(button=>button.addEventListener("click",()=>showView(button.dataset.view)));
+
+    function renderActiveView(){if(activeView==="events")renderEventsView();else if(activeView==="decisions")renderDecisionsView();else if(activeView==="settings")renderSettingsStatic()}
+    const baseRender=render;
+    render=function(){baseRender();renderActiveView()};
+
+    // ---- Events -------------------------------------------------------------
+    function filteredEvents(){
+      const query=$("#eventsSearch").value.trim().toLowerCase();const when=$("#eventsWhen").value;const sensitivity=$("#eventsSensitivity").value;const today=todaySgt();
+      const list=events.filter(event=>{
+        if(when==="upcoming"&&event.date<today)return false;
+        if(when==="past"&&event.date>=today)return false;
+        if(sensitivity&&event.sensitivity!==sensitivity)return false;
+        if(query&&![event.name,event.venue,event.venueAddress,event.type,event.backupVenue?.name].some(text=>String(text||"").toLowerCase().includes(query)))return false;
+        return true});
+      const key=event=>`${event.date}T${event.time}`;
+      return list.sort((a,b)=>when==="past"?key(b).localeCompare(key(a)):key(a).localeCompare(key(b)));
+    }
+    function renderEventsView(){
+      const body=$("#eventsTableBody");const list=filteredEvents();
+      $("#eventsCount").textContent=`${list.length} of ${events.length} event${events.length===1?"":"s"}`;
+      if(!list.length){body.innerHTML=`<tr><td colspan="7"><div class="empty" style="border:0">${events.length?"No events match these filters.":"No saved events yet. Add an event to begin."}</div></td></tr>`;return}
+      body.innerHTML=list.map(event=>{const latest=latestDecision(event);const count=Array.isArray(event.decisions)?event.decisions.length:0;const id=escapeHtml(event.id);return `<tr>
+        <td><b>${escapeHtml(event.name)}</b><small>${escapeHtml(event.type)}</small></td>
+        <td>${escapeHtml(formatEventDate(event.date,event.time))}</td>
+        <td>${escapeHtml(event.venue)}<small>${event.backupVenue?`Backup: ${escapeHtml(event.backupVenue.name)}`:"No backup venue"}</small></td>
+        <td>${Number(event.participantCount||0)}</td>
+        <td><span class="pill ${escapeHtml(event.sensitivity)}">${escapeHtml(event.sensitivity[0].toUpperCase()+event.sensitivity.slice(1))}</span></td>
+        <td>${latest?`<span class="pill ${escapeHtml(latest.action)}">${escapeHtml(DECISION_NAMES[latest.action]||latest.action)}</span><small>${escapeHtml(formatDateTime(latest.decidedAt))}${count>1?` · ${count} decisions`:""}</small>`:'<small style="margin:0">None yet</small>'}</td>
+        <td><div class="row-actions"><button class="secondary" type="button" data-row-action="decision" data-id="${id}">Record decision</button><button class="secondary" type="button" data-row-action="edit" data-id="${id}">Edit</button><button class="secondary" type="button" data-row-action="delete" data-id="${id}">Delete</button></div></td></tr>`}).join("");
+    }
+    async function deleteEventRecord(event){
+      if(!confirm(`Delete “${event.name}”? This removes it and its decision history from the event store.`))return;
+      try{await api(`/api/events/${encodeURIComponent(event.id)}`,{method:"DELETE"});events=events.filter(item=>item.id!==event.id);delete liveWeather[event.id];addLog(`Deleted event: ${event.name}.`);toast("Event deleted.")}catch(error){toast(`Could not delete event: ${error.message}`)}
+    }
+    $("#eventsTableBody").addEventListener("click",event=>{const button=event.target.closest("button[data-row-action]");if(!button)return;const record=events.find(item=>item.id===button.dataset.id);if(!record)return;if(button.dataset.rowAction==="decision")decisionFor(record);else if(button.dataset.rowAction==="edit")openModal(record);else if(button.dataset.rowAction==="delete")deleteEventRecord(record)});
+    ["#eventsSearch","#eventsWhen","#eventsSensitivity"].forEach(selector=>$(selector).addEventListener("input",renderEventsView));
+    $("#eventsAddButton").addEventListener("click",()=>openModal());
+
+    // ---- Decision history ---------------------------------------------------
+    function allDecisions(){return events.flatMap(event=>(Array.isArray(event.decisions)?event.decisions:[]).map(decision=>({event,decision}))).sort((a,b)=>String(b.decision.decidedAt).localeCompare(String(a.decision.decidedAt)))}
+    function filteredDecisions(){const query=$("#decisionsSearch").value.trim().toLowerCase();const action=$("#decisionsAction").value;return allDecisions().filter(({event,decision})=>(!action||decision.action===action)&&(!query||[event.name,event.venue,decision.reason,decision.label].some(text=>String(text||"").toLowerCase().includes(query))))}
+    function renderDecisionsView(){
+      const all=allDecisions();const list=filteredDecisions();
+      const counts=Object.keys(DECISION_NAMES).map(action=>[action,all.filter(item=>item.decision.action===action).length]).filter(([,count])=>count>0);
+      $("#decisionSummary").innerHTML=counts.length?counts.map(([action,count])=>`<span class="pill ${action}">${escapeHtml(DECISION_NAMES[action])}: ${count}</span>`).join(""):"";
+      $("#decisionsCount").textContent=`${list.length} of ${all.length} decision${all.length===1?"":"s"}`;
+      const body=$("#decisionsTableBody");
+      if(!list.length){body.innerHTML=`<tr><td colspan="5"><div class="empty" style="border:0">${all.length?"No decisions match these filters.":"No decisions recorded yet. Record one from the Overview or Events page."}</div></td></tr>`;return}
+      body.innerHTML=list.map(({event,decision})=>`<tr>
+        <td style="white-space:nowrap">${escapeHtml(formatDateTime(decision.decidedAt))}</td>
+        <td><b>${escapeHtml(event.name)}</b><small>${escapeHtml(formatEventDate(event.date,event.time))} · ${escapeHtml(event.venue)}</small></td>
+        <td><span class="pill ${escapeHtml(decision.action)}">${escapeHtml(decision.label||DECISION_NAMES[decision.action]||decision.action)}</span></td>
+        <td class="reason">${escapeHtml(decision.reason)}</td>
+        <td>${decision.testNotification?.status==="not_sent"?`Test preview only<small>Not sent · ${Number(decision.testNotification.intendedRecipientCount||0)} intended</small>`:"—"}</td></tr>`).join("");
+    }
+    ["#decisionsSearch","#decisionsAction"].forEach(selector=>$(selector).addEventListener("input",renderDecisionsView));
+    $("#decisionsCsvButton").addEventListener("click",()=>{
+      const rows=filteredDecisions();if(!rows.length){toast("There are no decisions to download.");return}
+      const cell=value=>`"${String(value??"").replaceAll('"','""')}"`;
+      const header=["decided_at","event","event_date","event_time","venue","decision","label","reason","notification_status","intended_recipients"];
+      const lines=rows.map(({event,decision})=>[decision.decidedAt,event.name,event.date,event.time,event.venue,decision.action,decision.label,decision.reason,decision.testNotification?.status,decision.testNotification?.intendedRecipientCount].map(cell).join(","));
+      const blob=new Blob(["﻿"+[header.join(","),...lines].join("\r\n")],{type:"text/csv;charset=utf-8"});
+      const link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download=`rainready-decisions-${todaySgt()}.csv`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+    });
+
+    // ---- Settings -----------------------------------------------------------
+    function renderSettingsStatic(){
+      const organization=authState?.activeOrganization;
+      $("#settingsOrgName").textContent=organization?.name||"—";
+      $("#settingsRole").textContent=organization?(organization.role==="owner"?"Owner":"Member"):"—";
+      $("#settingsEmail").textContent=authState?.user?.email||"—";
+      $("#settingsOrgId").textContent=organization?.id||"—";
+      $("#settingsLogCount").textContent=`${logs.length} entr${logs.length===1?"y":"ies"}`;
+      $("#settingsLightning").textContent=lightning?"Confirmed (stop and shelter)":"Not confirmed";
+      $("#settingsInviteButton").hidden=organization?.role!=="owner";
+      if(organization&&settingsLoadedFor!==organization.id)loadSettings();
+    }
+    async function loadServerInfo(){
+      try{const response=await fetch("/health",{cache:"no-store"});serverInfo=await response.json()}catch{serverInfo=null}
+      const storage=serverInfo?.storage;
+      $("#settingsStorage").textContent=storage==="postgres"?"PostgreSQL":storage==="sqlite"?"SQLite (local file)":"Unknown";
+      $("#settingsVersion").textContent=serverInfo?.version||"—";
+    }
+    async function loadSettings(){
+      const organization=authState?.activeOrganization;if(!organization)return;
+      settingsLoadedFor=organization.id;renderSettingsStatic();loadServerInfo();
+      const list=$("#settingsMembers");const note=$("#settingsMembersNote");
+      if(organization.role!=="owner"){list.replaceChildren();note.textContent="Only the organisation owner can view and manage members.";return}
+      note.textContent="Removing a member signs them out everywhere and removes their access to this organisation.";
+      list.textContent="Loading members…";
+      try{
+        const result=await api("/api/auth/members");
+        list.replaceChildren(...result.members.map(member=>{
+          const row=document.createElement("div");row.className="member-row";
+          const detail=document.createElement("div");const email=document.createElement("b");email.textContent=member.email;const meta=document.createElement("small");meta.textContent=`${member.role==="owner"?"Owner":"Member"} · joined ${new Date(member.joined_at).toLocaleDateString("en-SG",{dateStyle:"medium"})}${member.id===authState?.user?.id?" · you":""}`;detail.append(email,meta);row.append(detail);
+          if(member.role==="member"){const remove=document.createElement("button");remove.type="button";remove.className="secondary";remove.textContent="Remove";remove.addEventListener("click",async()=>{if(!confirm(`Remove ${member.email} from this organisation? They will be signed out everywhere.`))return;try{await api(`/api/auth/members/${encodeURIComponent(member.id)}`,{method:"DELETE"});toast("Member removed and their sessions revoked.");settingsLoadedFor=null;loadSettings()}catch(error){toast(error.message)}});row.append(remove)}
+          return row}));
+      }catch(error){list.textContent=`Could not load members: ${error.message}`}
+    }
+    $("#settingsInviteButton").addEventListener("click",()=>$("#inviteMemberButton").click());
+    $("#settingsSignOut").addEventListener("click",()=>$("#signOutButton").click());
+    $("#settingsSignOutAll").addEventListener("click",()=>{if(confirm("Sign out of RainReady on every device?"))$("#signOutEverywhereButton").click()});
+    $("#settingsClearLog").addEventListener("click",()=>$("#clearLogBtn").click());
+    $("#organizationSelect").addEventListener("change",()=>{settingsLoadedFor=null});
+
+    showView((location.hash||"").slice(1)||"overview",{updateHash:false});
   </script>
 </body>
 </html>
