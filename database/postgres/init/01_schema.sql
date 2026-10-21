@@ -326,6 +326,11 @@ CREATE TRIGGER events_audit_delete    AFTER DELETE ON events           FOR EACH 
 -- ===========================================================================
 
 -- Upcoming events within radius_m of a point (e.g. a rainfall station or lightning strike).
+-- Both conditions can use an index, so PostgreSQL never has to read every stored event:
+--   * location: ST_DWithin on events.location uses the GiST index idx_events_location;
+--   * time: the event_date range uses the B-tree index idx_events_date. The exact start-time
+--     window is then checked on the few rows that remain (starts_at is calculated per row).
+-- Events that started up to 6 hours before p_from are included, so live events are found.
 -- Runs with the caller's rights, so row-level security still limits it to one organisation.
 CREATE FUNCTION events_near(p_lat double precision, p_lon double precision,
                             p_radius_m double precision,
@@ -335,7 +340,9 @@ RETURNS SETOF events_with_start
 LANGUAGE sql STABLE AS $$
     SELECT *
       FROM events_with_start e
-     WHERE e.starts_at BETWEEN p_from - interval '6 hours' AND p_from + p_lookahead
+     WHERE e.event_date BETWEEN ((p_from - interval '6 hours') AT TIME ZONE 'Asia/Singapore')::date
+                            AND ((p_from + p_lookahead) AT TIME ZONE 'Asia/Singapore')::date
+       AND e.starts_at BETWEEN p_from - interval '6 hours' AND p_from + p_lookahead
        AND ST_DWithin(e.location, ST_SetSRID(ST_MakePoint(p_lon, p_lat), 4326)::geography, p_radius_m);
 $$;
 

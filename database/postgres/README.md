@@ -30,6 +30,9 @@ future PostgreSQL storage adapter (`event-store-pg.mjs`) does belong in `backend
 | `scripts/export-sqlite.mjs` | Read-only export of your SQLite data to a PostgreSQL load script |
 | `tests/tenant_isolation.sql` | 6 cross-tenant checks, run as the app role |
 | `tests/safety_rules.sql` | 7 checks: lightning hold, append-only history, risk bands, audit |
+| `tests/events_near.sql` | 6 checks: `events_near()` returns the right events by place, time and organisation |
+| `tests/explain_events_near.sql` | Loads 20,000 synthetic events, prints the query plans, rolls back (report evidence) |
+| `migrations/*.sql` | Updates for databases created before a schema change; run once, in number order |
 
 Files in `init/` run once, in name order, the first time the container starts with an empty volume.
 
@@ -63,6 +66,7 @@ psql -f rds/apply.sql
 psql -c "\password rainready_app"
 psql -f tests/tenant_isolation.sql
 psql -f tests/safety_rules.sql
+psql -f tests/events_near.sql
 ```
 
 ## Run it locally (needs approval)
@@ -76,6 +80,7 @@ docker compose up -d
 docker compose logs -f db          # wait for "database system is ready to accept connections", Ctrl+C
 docker compose exec db psql -U rainready_admin -d rainready -f /tests/tenant_isolation.sql
 docker compose exec db psql -U rainready_admin -d rainready -f /tests/safety_rules.sql
+docker compose exec db psql -U rainready_admin -d rainready -f /tests/events_near.sql
 ```
 
 Copy existing SQLite data across (stop `npm start` first):
@@ -90,6 +95,38 @@ docker compose exec db rm /tmp/import.sql
 ```
 
 The export opens SQLite read-only and the load is one transaction, so a failure leaves PostgreSQL unchanged.
+
+## Finding affected events without scanning
+
+When a new observation arrives (a rainfall reading or a lightning strike), `events_near(lat, lon,
+radius_m, from, lookahead)` returns only the upcoming events within `radius_m` of it, starting
+between 6 hours before `from` and `lookahead` after it (24 hours by default). Both conditions can
+use an index, so PostgreSQL does not read every stored event:
+
+| Condition | Index |
+|---|---|
+| Within the radius (`ST_DWithin` on `events.location`) | GiST `idx_events_location` |
+| Event date in the window | B-tree `idx_events_date` |
+| Organisation (row-level security) | `idx_events_organization_created` |
+
+The exact start time is then checked on the few rows that remain. To see the plans:
+
+```powershell
+docker compose exec db psql -U rainready_admin -d rainready -f /tests/explain_events_near.sql
+```
+
+## Schema updates (migrations)
+
+`init/` runs only on a brand-new database. When the schema changes later, the change is also
+added as a numbered file in `migrations/` so existing databases can be updated without losing data.
+Run each new file once, in number order:
+
+```powershell
+docker compose up -d     # once, so the container sees the migrations folder
+docker compose exec db psql -U rainready_admin -d rainready -f /migrations/001_events_near_date_index.sql
+```
+
+For RDS: `psql -f migrations/001_events_near_date_index.sql` with the connection settings above.
 
 ## Connecting the backend
 
