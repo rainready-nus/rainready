@@ -27,3 +27,7 @@ The future cloud storage option is Amazon RDS for PostgreSQL, to be evaluated wh
 
 Risk mappings and bands are experimental project assumptions, not official NEA thresholds. Historical probability is excluded until validated. Lightning observations are context only, not an official warning or all-clear.
 
+
+## PostgreSQL storage (optional)
+
+`event-store-pg.mjs` implements the same storage interface against PostgreSQL (schema in `database/postgres/`). Set `RAINREADY_DB_DRIVER=postgres` and the `RAINREADY_DB_*` connection settings in `.env` (see `.env.example`), then `npm start`. The adapter connects as the least-privilege `rainready_app` role and runs every event query in a transaction that sets `app.organization_id`, so PostgreSQL row-level security enforces the organisation boundary as well as the application checks. `auth.mjs` and `server.mjs` await every store call, so both the synchronous SQLite store and the asynchronous PostgreSQL store work. The `pg` package is loaded only when the PostgreSQL driver is selected; the default SQLite setup still has no npm dependencies at runtime. `npm test` runs the usual suite and skips the PostgreSQL tests; `npm run test:pg` runs `event-store-pg.test.mjs` against the configured database. The PostgreSQL store does not import `backend/data/events.json`; use `npm run db:export` to copy SQLite data across.
