@@ -207,7 +207,7 @@ export function createPgEventStore(config) {
       }
     },
     async listMemberships(userId) {
-      const { rows } = await pool.query(`SELECT o.id, o.name, m.role FROM organization_memberships m
+      const { rows } = await pool.query(`SELECT o.id, o.name, o.plan, m.role FROM organization_memberships m
         JOIN organizations o ON o.id = m.organization_id
         WHERE m.user_id = $1 ORDER BY o.created_at, o.name`, [userId]);
       return rows;
@@ -226,10 +226,17 @@ export function createPgEventStore(config) {
       await pool.query("DELETE FROM auth_sessions WHERE token_hash = $1", [tokenHash]);
     },
     async getMembership(userId, organizationId) {
-      const { rows } = await pool.query(`SELECT m.role, o.id, o.name FROM organization_memberships m
+      const { rows } = await pool.query(`SELECT m.role, o.id, o.name, o.plan FROM organization_memberships m
         JOIN organizations o ON o.id = m.organization_id
         WHERE m.user_id = $1 AND m.organization_id = $2`, [userId, organizationId]);
       return rows[0] ?? null;
+    },
+    /** Operator/billing use only (npm run plan); no HTTP route changes a plan. */
+    async setOrganizationPlan(organizationId, plan) {
+      return (await pool.query("UPDATE organizations SET plan = $1 WHERE id = $2", [plan, organizationId])).rowCount > 0;
+    },
+    async getOrganization(organizationId) {
+      return (await pool.query("SELECT id, name, plan FROM organizations WHERE id = $1", [organizationId])).rows[0] ?? null;
     },
     async createInvitation({ tokenHash, organizationId, createdByUserId, expiresAt, now }) {
       await pool.query(`INSERT INTO organization_invitations
@@ -283,8 +290,24 @@ export function createPgEventStore(config) {
     },
   };
 
+  const ads = {
+    /** kind is "impression" or "click"; adds one to that day's counter (not organisation data, so no RLS scope). */
+    async record({ adId, placement, day, kind }) {
+      const column = kind === "click" ? "clicks" : "impressions";
+      await pool.query(`INSERT INTO ad_daily_stats (ad_id, placement, day, ${column}) VALUES ($1, $2, $3::date, 1)
+        ON CONFLICT (ad_id, placement, day) DO UPDATE SET ${column} = ad_daily_stats.${column} + 1`, [adId, placement, day]);
+    },
+    async stats({ fromDay = "2000-01-01", toDay = "2100-12-31" } = {}) {
+      const { rows } = await pool.query(`SELECT ad_id AS "adId", placement, to_char(day, 'YYYY-MM-DD') AS day,
+          impressions::int AS impressions, clicks::int AS clicks
+        FROM ad_daily_stats WHERE day BETWEEN $1::date AND $2::date ORDER BY day, ad_id, placement`, [fromDay, toDay]);
+      return rows;
+    },
+  };
+
   return {
     auth,
+    ads,
     driver: "postgres",
     async list(organizationId) {
       return forOrganization(organizationId, async (client) => {

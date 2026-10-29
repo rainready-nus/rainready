@@ -183,3 +183,27 @@ test("PostgreSQL: rate limit blocks after the allowed attempts", { skip }, async
     assert.ok(blocked.retryAfterSeconds > 0);
   });
 });
+
+test("PostgreSQL: ad counters add up concurrently and hold no user data", { skip }, async () => {
+  await withStore(async (store) => {
+    const adId = `pg-ad-${unique()}`;
+    const day = "2026-11-03";
+    await Promise.all(Array.from({ length: 10 }, () => store.ads.record({ adId, placement: "overview", day, kind: "impression" })));
+    await store.ads.record({ adId, placement: "overview", day, kind: "click" });
+    const rows = (await store.ads.stats({ fromDay: day, toDay: day })).filter((row) => row.adId === adId);
+    assert.deepEqual(rows, [{ adId, placement: "overview", day, impressions: 10, clicks: 1 }]);
+    await assert.rejects(store.ads.record({ adId, placement: "login", day, kind: "click" }), { code: "23514" });
+  });
+});
+
+test("PostgreSQL: organisations start on Free and only the plan column can be changed", { skip }, async () => {
+  await withStore(async (store) => {
+    const auth = createAuthService(store.auth);
+    const owner = await auth.register({ email: `plan-${unique()}@example.com`, password: PASSWORD, organizationName: `Plan Club ${unique()}` });
+    const organizationId = owner.organizations[0].id;
+    assert.equal(owner.organizations[0].plan, "free");
+    assert.equal(await store.auth.setOrganizationPlan(organizationId, "community"), true);
+    assert.equal((await store.auth.getMembership(owner.user.id, organizationId)).plan, "community");
+    await assert.rejects(store.auth.setOrganizationPlan(organizationId, "platinum"), { code: "23514" });
+  });
+});

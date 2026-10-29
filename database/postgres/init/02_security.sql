@@ -39,6 +39,7 @@ END $$;
 GRANT USAGE ON SCHEMA public TO rainready_app;
 
 GRANT SELECT, INSERT                 ON organizations            TO rainready_app;
+GRANT UPDATE (plan)                  ON organizations            TO rainready_app;  -- plan changes only (npm run plan / future billing)
 GRANT SELECT, INSERT, DELETE         ON users                    TO rainready_app;  -- delete: removeOrganizationMember
 GRANT SELECT, INSERT, DELETE         ON organization_memberships TO rainready_app;
 GRANT SELECT, INSERT, DELETE         ON auth_sessions            TO rainready_app;
@@ -53,6 +54,7 @@ GRANT SELECT, INSERT                 ON event_decisions,
                                         lightning_alerts,
                                         audit_log                TO rainready_app;  -- no UPDATE/DELETE: append-only
 
+GRANT SELECT, INSERT, UPDATE         ON ad_daily_stats           TO rainready_app;  -- update: counter += 1
 GRANT SELECT                         ON data_sources             TO rainready_app;
 GRANT SELECT, INSERT                 ON weather_snapshots        TO rainready_app;
 GRANT SELECT ON events_with_start, source_freshness              TO rainready_app;

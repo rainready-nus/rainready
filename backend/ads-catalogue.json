@@ -1,0 +1,67 @@
+{
+  "_comment": "Demo house ads. Every sponsor here is fictional and every link goes to example.com. Replace with real, approved sponsor messages before any public launch.",
+  "ads": [
+    {
+      "id": "canopy-hire",
+      "sponsor": "ShadeWorks Event Hire (demo sponsor)",
+      "headline": "Pop-up canopies, delivered the same day",
+      "body": "10 x 10 ft tents with side walls for outdoor events across Singapore. Book by 2 pm for evening delivery.",
+      "cta": "See canopy rates",
+      "url": "https://example.com/demo/shadeworks-canopies",
+      "contexts": ["wet", "general"],
+      "weight": 3
+    },
+    {
+      "id": "ponchos-bulk",
+      "sponsor": "DryRun Supplies (demo sponsor)",
+      "headline": "Event ponchos from 60 cents each",
+      "body": "Bulk disposable ponchos and umbrella stands for runs, fairs and outdoor screenings.",
+      "cta": "Order ponchos",
+      "url": "https://example.com/demo/dryrun-ponchos",
+      "contexts": ["wet"],
+      "weight": 2
+    },
+    {
+      "id": "event-cover",
+      "sponsor": "SafeDay Event Cover (demo sponsor)",
+      "headline": "Weather cover for student and community events",
+      "body": "Protect deposits when an event has to be postponed. Quotes in five minutes.",
+      "cta": "Get a quote",
+      "url": "https://example.com/demo/safeday-cover",
+      "contexts": ["wet", "general"],
+      "weight": 1
+    },
+    {
+      "id": "hall-booking",
+      "sponsor": "HallFinder SG (demo sponsor)",
+      "headline": "Need a sheltered backup venue?",
+      "body": "Compare indoor halls and sheltered courts near your event and hold one in advance.",
+      "cta": "Browse halls",
+      "url": "https://example.com/demo/hallfinder",
+      "contexts": ["wet", "general"],
+      "placements": ["overview", "events"],
+      "weight": 2
+    },
+    {
+      "id": "hydration-station",
+      "sponsor": "CoolCrew Hydration (demo sponsor)",
+      "headline": "Water stations for outdoor events",
+      "body": "Refill stations and cooling towels for sports days and fun runs. Free set-up for groups of 100 or more.",
+      "cta": "Plan hydration",
+      "url": "https://example.com/demo/coolcrew",
+      "contexts": ["general"],
+      "weight": 2
+    },
+    {
+      "id": "rainready-plus",
+      "sponsor": "RainReady",
+      "headline": "Go ad-free with the Community plan",
+      "body": "Team access, more events, contingency templates and no sponsored messages.",
+      "cta": "Compare plans",
+      "url": "https://example.com/demo/rainready-plans",
+      "contexts": ["general"],
+      "placements": ["settings", "decisions"],
+      "weight": 1
+    }
+  ]
+}

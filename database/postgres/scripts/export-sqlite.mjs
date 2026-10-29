@@ -30,6 +30,7 @@ if (!existsSync(input)) {
 
 const db = new DatabaseSync(input, { readOnly: true });
 const hasTable = (name) => Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name));
+const hasColumn = (table, column) => hasTable(table) && db.prepare(`PRAGMA table_info(${table})`).all().some((row) => row.name === column);
 
 const literal = (value) => {
   if (value === null || value === undefined) return "NULL";
@@ -43,8 +44,8 @@ const literal = (value) => {
 
 // [target table, columns, SQLite query returning exactly those columns in order]
 const exports = [
-  ["organizations", ["id", "name", "created_at"],
-    "SELECT id, name, created_at FROM organizations ORDER BY created_at, id"],
+  ["organizations", ["id", "name", "created_at", "plan"],
+    `SELECT id, name, created_at, ${hasColumn("organizations", "plan") ? "plan" : "'free' AS plan"} FROM organizations ORDER BY created_at, id`],
   ["users", ["id", "email", "password_hash", "created_at"],
     "SELECT id, email, password_hash, created_at FROM users ORDER BY created_at, id"],
   ["organization_memberships", ["user_id", "organization_id", "role", "created_at"],
@@ -72,6 +73,9 @@ const exports = [
       ORDER BY n.generated_at`],
   ["legacy_imports", ["source_path", "imported_at", "imported_count"],
     "SELECT source_path, imported_at, imported_count FROM legacy_imports ORDER BY imported_at"],
+  // Sponsored-message counters (aggregated; no user data). Needs migration 002 on older databases.
+  ["ad_daily_stats", ["ad_id", "placement", "day", "impressions", "clicks"],
+    "SELECT ad_id, placement, day, impressions, clicks FROM ad_daily_stats ORDER BY day, ad_id, placement"],
 ];
 
 const lines = [

@@ -18,7 +18,8 @@ function createSchema(db) {
     CREATE TABLE IF NOT EXISTS organizations (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      plan TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'community', 'enterprise'))
     );
     INSERT OR IGNORE INTO organizations (id, name, created_at)
       VALUES ('legacy', 'Imported legacy events', '1970-01-01T00:00:00.000Z');
@@ -100,12 +101,26 @@ function createSchema(db) {
       imported_at TEXT NOT NULL,
       imported_count INTEGER NOT NULL
     );
+    -- Sponsored messages: aggregated daily counters only, no user or organisation identifiers.
+    CREATE TABLE IF NOT EXISTS ad_daily_stats (
+      ad_id TEXT NOT NULL,
+      placement TEXT NOT NULL,
+      day TEXT NOT NULL,
+      impressions INTEGER NOT NULL DEFAULT 0 CHECK (impressions >= 0),
+      clicks INTEGER NOT NULL DEFAULT 0 CHECK (clicks >= 0),
+      PRIMARY KEY (ad_id, placement, day)
+    );
   `);
   const columns = db.prepare("PRAGMA table_info(events)").all().map((column) => column.name);
   if (!columns.includes("organization_id")) {
     db.exec("ALTER TABLE events ADD COLUMN organization_id TEXT NOT NULL DEFAULT 'legacy'");
   }
   db.exec("CREATE INDEX IF NOT EXISTS idx_events_organization_created ON events(organization_id, created_at)");
+  // Subscription plan per organisation (databases created before plans start everyone on Free).
+  const organizationColumns = db.prepare("PRAGMA table_info(organizations)").all().map((column) => column.name);
+  if (!organizationColumns.includes("plan")) {
+    db.exec("ALTER TABLE organizations ADD COLUMN plan TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'community', 'enterprise'))");
+  }
 }
 
 function eventFromRow(row, decisions = []) {
@@ -266,7 +281,7 @@ export function createEventStore({ databasePath, legacyFilePath = null } = {}) {
       }
     },
     listMemberships(userId) {
-      return db.prepare(`SELECT o.id, o.name, m.role FROM organization_memberships m
+      return db.prepare(`SELECT o.id, o.name, o.plan, m.role FROM organization_memberships m
         JOIN organizations o ON o.id = m.organization_id
         WHERE m.user_id = ? ORDER BY o.created_at, o.name`).all(userId);
     },
@@ -283,9 +298,16 @@ export function createEventStore({ databasePath, legacyFilePath = null } = {}) {
       db.prepare("DELETE FROM auth_sessions WHERE token_hash = ?").run(tokenHash);
     },
     getMembership(userId, organizationId) {
-      return db.prepare(`SELECT m.role, o.id, o.name FROM organization_memberships m
+      return db.prepare(`SELECT m.role, o.id, o.name, o.plan FROM organization_memberships m
         JOIN organizations o ON o.id = m.organization_id
         WHERE m.user_id = ? AND m.organization_id = ?`).get(userId, organizationId) ?? null;
+    },
+    /** Operator/billing use only (npm run plan); no HTTP route changes a plan. */
+    setOrganizationPlan(organizationId, plan) {
+      return db.prepare("UPDATE organizations SET plan = ? WHERE id = ?").run(plan, organizationId).changes > 0;
+    },
+    getOrganization(organizationId) {
+      return db.prepare("SELECT id, name, plan FROM organizations WHERE id = ?").get(organizationId) ?? null;
     },
     createInvitation({ tokenHash, organizationId, createdByUserId, expiresAt, now }) {
       db.prepare(`INSERT INTO organization_invitations
@@ -348,8 +370,22 @@ export function createEventStore({ databasePath, legacyFilePath = null } = {}) {
     },
   };
 
+  const ads = {
+    /** kind is "impression" or "click"; adds one to that day's counter. */
+    async record({ adId, placement, day, kind }) {
+      const column = kind === "click" ? "clicks" : "impressions";
+      db.prepare(`INSERT INTO ad_daily_stats (ad_id, placement, day, ${column}) VALUES (?, ?, ?, 1)
+        ON CONFLICT (ad_id, placement, day) DO UPDATE SET ${column} = ${column} + 1`).run(adId, placement, day);
+    },
+    async stats({ fromDay = "0000-00-00", toDay = "9999-99-99" } = {}) {
+      return db.prepare(`SELECT ad_id AS adId, placement, day, impressions, clicks FROM ad_daily_stats
+        WHERE day >= ? AND day <= ? ORDER BY day, ad_id, placement`).all(fromDay, toDay).map((row) => ({ ...row }));
+    },
+  };
+
   return {
     auth,
+    ads,
     async list(organizationId) {
       return db.prepare("SELECT id FROM events WHERE organization_id = ? ORDER BY created_at, rowid").all(organizationId).map(({ id }) => get(organizationId, id));
     },

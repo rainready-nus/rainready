@@ -32,7 +32,7 @@ future PostgreSQL storage adapter (`event-store-pg.mjs`) does belong in `backend
 | `tests/safety_rules.sql` | 7 checks: lightning hold, append-only history, risk bands, audit |
 | `tests/events_near.sql` | 6 checks: `events_near()` returns the right events by place, time and organisation |
 | `tests/explain_events_near.sql` | Loads 20,000 synthetic events, prints the query plans, rolls back (report evidence) |
-| `migrations/*.sql` | Updates for databases created before a schema change; run once, in number order |
+| `migrations/*.sql` | Updates for databases created before a schema change; run once, in number order (002 adds `ad_daily_stats`, 003 adds `organizations.plan`) |
 
 Files in `init/` run once, in name order, the first time the container starts with an empty volume.
 
@@ -40,7 +40,8 @@ Files in `init/` run once, in name order, the first time the container starts wi
 
 | SQLite (`event-store.mjs`) | PostgreSQL | Change |
 |---|---|---|
-| `organizations`, `users`, `organization_memberships`, `auth_sessions`, `auth_rate_limits`, `organization_invitations`, `legacy_imports` | same names and columns | text timestamps become `timestamptz`; email is `citext` (case-insensitive like `COLLATE NOCASE`) |
+| `organizations` | same columns, incl. `plan` | the app role may UPDATE only the `plan` column (`npm run plan`, later billing) |
+| `users`, `organization_memberships`, `auth_sessions`, `auth_rate_limits`, `organization_invitations`, `legacy_imports` | same names and columns | text timestamps become `timestamptz`; email is `citext` (case-insensitive like `COLLATE NOCASE`) |
 | `events` | same columns | `event_date` is `date`, `event_time` is `time`; new generated `location` (PostGIS) |
 | `event_decisions` | same columns | + `organization_id`, optional `decided_by_user_id`, `assessment_id`; append-only |
 | `notification_previews` | same columns | + `organization_id`; still `mode='test'`, `status='not_sent'`; append-only |
@@ -48,6 +49,7 @@ Files in `init/` run once, in name order, the first time the container starts wi
 | — | `lightning_alerts` | new: organiser-confirmed alert / all-clear; `continue` is refused while an alert is in force |
 | — | `data_sources`, `weather_snapshots`, `source_freshness` view | new: source time + retrieval time per fetch, current/stale/unavailable |
 | — | `audit_log` | new: decisions, alerts and event deletions, append-only |
+| `ad_daily_stats` | same columns | `day` is `date`; counts only, so no row-level security; app role has no DELETE |
 
 Participant data stays a count only, matching the app's privacy scope.
 
@@ -124,9 +126,11 @@ Run each new file once, in number order:
 ```powershell
 docker compose up -d     # once, so the container sees the migrations folder
 docker compose exec db psql -U rainready_admin -d rainready -f /migrations/001_events_near_date_index.sql
+docker compose exec db psql -U rainready_admin -d rainready -f /migrations/002_ad_daily_stats.sql
+docker compose exec db psql -U rainready_admin -d rainready -f /migrations/003_organization_plan.sql
 ```
 
-For RDS: `psql -f migrations/001_events_near_date_index.sql` with the connection settings above.
+For RDS: run `migrations/001_events_near_date_index.sql`, `002_ad_daily_stats.sql` and `003_organization_plan.sql` with `psql -f`, in that order, with the connection settings above.
 
 ## Connecting the backend
 
