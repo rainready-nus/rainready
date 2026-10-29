@@ -32,7 +32,7 @@ future PostgreSQL storage adapter (`event-store-pg.mjs`) does belong in `backend
 | `tests/safety_rules.sql` | 7 checks: lightning hold, append-only history, risk bands, audit |
 | `tests/events_near.sql` | 6 checks: `events_near()` returns the right events by place, time and organisation |
 | `tests/explain_events_near.sql` | Loads 20,000 synthetic events, prints the query plans, rolls back (report evidence) |
-| `migrations/*.sql` | Updates for databases created before a schema change; run once, in number order (002 adds `ad_daily_stats`, 003 adds `organizations.plan`) |
+| `migrations/*.sql` | Updates for databases created before a schema change; run once, in number order (002 adds `ad_daily_stats`, 003 adds `organizations.plan`, 004 adds participants, participant notifications and billing) |
 
 Files in `init/` run once, in name order, the first time the container starts with an empty volume.
 
@@ -50,6 +50,8 @@ Files in `init/` run once, in name order, the first time the container starts wi
 | — | `data_sources`, `weather_snapshots`, `source_freshness` view | new: source time + retrieval time per fetch, current/stale/unavailable |
 | — | `audit_log` | new: decisions, alerts and event deletions, append-only |
 | `ad_daily_stats` | same columns | `day` is `date`; counts only, so no row-level security; app role has no DELETE |
+| `event_join_links`, `event_participants`, `participant_notifications`, `notification_deliveries` | same columns | row-level security per organisation; email is `citext`; public join/unsubscribe pages go through the `join_link_target()` / `unsubscribe_target()` functions, which return one row for one exact token |
+| `billing_subscriptions`, `billing_webhook_events` | same columns | not under row-level security (the payment webhook has no organisation context), like `organizations` |
 
 Participant data stays a count only, matching the app's privacy scope.
 
@@ -128,9 +130,10 @@ docker compose up -d     # once, so the container sees the migrations folder
 docker compose exec db psql -U rainready_admin -d rainready -f /migrations/001_events_near_date_index.sql
 docker compose exec db psql -U rainready_admin -d rainready -f /migrations/002_ad_daily_stats.sql
 docker compose exec db psql -U rainready_admin -d rainready -f /migrations/003_organization_plan.sql
+docker compose exec db psql -U rainready_admin -d rainready -f /migrations/004_participants_billing.sql
 ```
 
-For RDS: run `migrations/001_events_near_date_index.sql`, `002_ad_daily_stats.sql` and `003_organization_plan.sql` with `psql -f`, in that order, with the connection settings above.
+For RDS: run `migrations/001_events_near_date_index.sql`, `002_ad_daily_stats.sql`, `003_organization_plan.sql` and `004_participants_billing.sql` with `psql -f`, in that order, with the connection settings above.
 
 ## Connecting the backend
 

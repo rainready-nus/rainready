@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { createNotificationSchema, createSqliteNotificationStore } from "./notification-store-sqlite.mjs";
 
 function parseLegacyEvents(filePath) {
   if (!filePath || !existsSync(filePath)) return [];
@@ -156,6 +157,8 @@ export function createEventStore({ databasePath, legacyFilePath = null } = {}) {
   const db = new DatabaseSync(databasePath);
   let closed = false;
   createSchema(db);
+  createNotificationSchema(db);
+  const { participants, notifications, billing } = createSqliteNotificationStore(db);
 
   const selectEvent = db.prepare("SELECT * FROM events WHERE id = ? AND organization_id = ?");
   const selectDecisions = db.prepare(`
@@ -386,6 +389,9 @@ export function createEventStore({ databasePath, legacyFilePath = null } = {}) {
   return {
     auth,
     ads,
+    participants,
+    notifications,
+    billing,
     async list(organizationId) {
       return db.prepare("SELECT id FROM events WHERE organization_id = ? ORDER BY created_at, rowid").all(organizationId).map(({ id }) => get(organizationId, id));
     },

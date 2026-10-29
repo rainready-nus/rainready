@@ -110,6 +110,41 @@ Whether ads appear depends on the selected organisation's plan (`free`, `communi
 
 Counting is limited to 300 ad events per user per 15 minutes. A counter that cannot be written is logged on the server and never blocks the page or the click-through. Stored rows are `ad_daily_stats (ad_id, placement, day, impressions, clicks)` only, with no user or organisation identifier.
 
+## Participants and participant emails
+
+Organiser routes need the session cookie and `X-RainReady-Organization`; events of another organisation return 404.
+
+- `GET /api/events/{eventId}/participants` returns `{ "participants": [{ "id", "email", "name", "consentSource", "consentedAt", "subscribed", "unsubscribedAt" }], "joinLink": { "url", "createdAt" } | null, "consentText", "notifyActions", "mailer" }`.
+- `POST /api/events/{eventId}/join-link` creates the join link, or replaces it (the old link stops working). Returns 201 `{ "joinLink" }`.
+- `DELETE /api/events/{eventId}/participants/{participantId}` deletes the participant's record.
+- `GET /api/participants/counts` returns `{ "counts": { "<eventId>": <subscribed participants> } }`.
+- `GET /api/events/{eventId}/notification-preview?action={relocate|postpone|cancel}&reason=...` returns `{ "notifies", "recipientCount", "mailer", "subject", "body" }` (the email text the participants would get).
+- `POST /api/events/{eventId}/decisions` accepts `"notifyParticipants": true`. Only for `relocate`, `postpone` and `cancel` it emails every subscribed participant once; the response adds `"notification": { "status": "sent" | "partly_failed" | "skipped" | "failed" | "not_requested", "recipientCount", "sentCount", "failedCount", "mailer", "reason"? }`. The decision is saved whatever happens to the emails. A repeated request for the same decision never sends again.
+- `GET /api/notifications?eventId=` returns the notification history (`decisionId`, `action`, `subject`, counts, `mailer`, times).
+
+Public routes (no account; random 32-character tokens; rate limited per IP):
+
+- `GET /join/{token}` and `GET /unsubscribe/{token}` serve `frontend/join.html` (`noindex`, `no-referrer`).
+- `GET /api/public/join/{token}` returns the event's name, date, time and venue and the consent text. `POST` with `{ "email", "name"?, "consent": true }` adds or re-subscribes the participant; the answer is the same whether or not the address was already on the list. Missing consent or an invalid email returns 400.
+- `GET /api/public/unsubscribe/{token}` returns the event name and a masked email; `POST` unsubscribes. `POST /unsubscribe/{token}` is the RFC 8058 one-click target used by mail apps.
+
+## Plan and billing
+
+- `GET /api/billing` returns `{ "plan", "subscription", "plans", "stripeEnabled", "testMode": true, "canManage" }`.
+- `POST /api/billing/checkout` (owner only) creates a Stripe Checkout Session for Community and returns `{ "url" }` on `checkout.stripe.com`. 503 when Stripe is not configured, 409 when already on a paid plan.
+- `POST /api/billing/confirm` with `{ "sessionId": "cs_test_..." }` asks Stripe for the session and switches to Community only if it is complete, paid, and belongs to this organisation (otherwise 409).
+- `POST /api/billing/cancel` (owner only) cancels the Stripe subscription and returns to Free.
+- `POST /api/billing/webhook` (Stripe only; exists when `RAINREADY_STRIPE_WEBHOOK_SECRET` is set) verifies the `Stripe-Signature` header (HMAC-SHA256, 5-minute tolerance) and applies `checkout.session.completed`, `customer.subscription.updated` and `customer.subscription.deleted`.
+
+## Developer demo tools
+
+Exist only when `RAINREADY_DEMO_TOOLS=true` and the signed-in user's ID is in `RAINREADY_DEVELOPER_USER_IDS`; otherwise every route answers 404. `GET /api/auth/me` returns `"developer": true|false`.
+
+- `GET /api/dev/status`: mailer, Stripe and plan status.
+- `POST /api/dev/plan` with `{ "plan": "free" | "community" | "enterprise" }`: switches the active organisation's plan without payment (recorded with provider `developer`).
+- `POST /api/dev/events/{eventId}/demo-participants` with `{ "count": 1-10 }`: adds synthetic `@example.com` participants.
+- `GET /api/dev/outbox`: the latest 100 participant emails of the active organisation, with the text as sent.
+
 ## Local configuration and secret handling
 
 The optional `.env.example` contains only placeholders and non-secret local defaults; copy it to the ignored `.env` file and configure either `ONEMAP_ACCESS_TOKEN` or both `ONEMAP_API_EMAIL` and `ONEMAP_API_PASSWORD` there to enable address search. `npm start` loads `.env`. Email/password mode stores the registered OneMap credentials locally and should only be used in a protected local environment; never share them or commit them. Do not commit OneMap tokens, passwords, AWS credentials, private keys, or participant personal data. For a future AWS deployment, store runtime secrets in AWS Secrets Manager and grant the backend a least-privilege IAM execution role. For GitHub Actions deployment, prefer OIDC role federation and narrowly scoped GitHub Actions secrets/permissions rather than long-lived AWS keys.

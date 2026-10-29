@@ -64,3 +64,25 @@ REVOKE ALL ON FUNCTION claim_legacy_events(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION claim_legacy_events(text)              TO rainready_app;
 GRANT EXECUTE ON FUNCTION events_near(double precision, double precision, double precision, timestamptz, interval) TO rainready_app;
 GRANT EXECUTE ON FUNCTION app_current_organization()             TO rainready_app;
+
+-- Participant notifications: row-level security per organisation, like events.
+DO $$
+DECLARE
+    t text;
+BEGIN
+    FOREACH t IN ARRAY ARRAY['event_join_links', 'event_participants', 'participant_notifications', 'notification_deliveries']
+    LOOP
+        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+        EXECUTE format($p$CREATE POLICY tenant_isolation ON %I TO rainready_app
+                         USING (organization_id = app_current_organization())
+                         WITH CHECK (organization_id = app_current_organization())$p$, t);
+    END LOOP;
+END $$;
+GRANT SELECT, INSERT, UPDATE         ON event_join_links          TO rainready_app;  -- update: new link
+GRANT SELECT, INSERT, UPDATE, DELETE ON event_participants        TO rainready_app;  -- delete: remove a participant
+GRANT SELECT, INSERT, UPDATE         ON participant_notifications,
+                                        notification_deliveries   TO rainready_app;  -- update: delivery status, counts
+GRANT SELECT, INSERT, UPDATE         ON billing_subscriptions     TO rainready_app;
+GRANT SELECT, INSERT                 ON billing_webhook_events    TO rainready_app;
+REVOKE ALL ON FUNCTION join_link_target(text), unsubscribe_target(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION join_link_target(text), unsubscribe_target(text) TO rainready_app;

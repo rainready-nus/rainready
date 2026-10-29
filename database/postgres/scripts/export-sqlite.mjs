@@ -12,7 +12,7 @@
  *   signs in again after the switch.
  * - Fills organization_id on decisions and previews from their event.
  *
- * The output contains password hashes and invitation hashes. The default output path is
+ * The output contains password hashes, invitation hashes and participants' email addresses. The default output path is
  * inside backend/data/, which .gitignore already excludes. Do not commit or share it.
  */
 import { DatabaseSync } from "node:sqlite";
@@ -73,6 +73,24 @@ const exports = [
       ORDER BY n.generated_at`],
   ["legacy_imports", ["source_path", "imported_at", "imported_count"],
     "SELECT source_path, imported_at, imported_count FROM legacy_imports ORDER BY imported_at"],
+  // Participants and participant emails (needs migration 004 on older databases). Contains
+  // participants' email addresses: keep the output private, like the password hashes.
+  ["event_join_links", ["event_id", "organization_id", "token", "created_at"],
+    "SELECT event_id, organization_id, token, created_at FROM event_join_links ORDER BY created_at"],
+  ["event_participants", ["id", "organization_id", "event_id", "email", "name", "consent_source", "consent_text", "consented_at",
+    "unsubscribe_token", "unsubscribed_at", "created_at"],
+    `SELECT id, organization_id, event_id, email, name, consent_source, consent_text, consented_at,
+            unsubscribe_token, unsubscribed_at, created_at FROM event_participants ORDER BY created_at, id`],
+  ["participant_notifications", ["id", "organization_id", "event_id", "decision_id", "action", "subject", "body", "mailer",
+    "recipient_count", "sent_count", "failed_count", "created_by_user_id", "created_at", "completed_at"],
+    `SELECT id, organization_id, event_id, decision_id, action, subject, body, mailer, recipient_count, sent_count, failed_count,
+            created_by_user_id, created_at, completed_at FROM participant_notifications ORDER BY created_at, id`],
+  ["notification_deliveries", ["id", "notification_id", "organization_id", "participant_id", "email", "unsubscribe_token", "status",
+    "provider_message_id", "error", "sent_at", "created_at"],
+    `SELECT id, notification_id, organization_id, participant_id, email, unsubscribe_token, status, provider_message_id, error,
+            sent_at, created_at FROM notification_deliveries ORDER BY created_at, id`],
+  ["billing_subscriptions", ["organization_id", "provider", "plan", "status", "customer_id", "subscription_id", "checkout_session_id", "updated_at"],
+    "SELECT organization_id, provider, plan, status, customer_id, subscription_id, checkout_session_id, updated_at FROM billing_subscriptions"],
   // Sponsored-message counters (aggregated; no user data). Needs migration 002 on older databases.
   ["ad_daily_stats", ["ad_id", "placement", "day", "impressions", "clicks"],
     "SELECT ad_id, placement, day, impressions, clicks FROM ad_daily_stats ORDER BY day, ad_id, placement"],

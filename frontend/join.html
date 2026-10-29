@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="theme-color" content="#102923" />
+  <title>RainReady — Event updates</title>
+  <style>
+    :root{--ink:#182923;--muted:#6d7b74;--line:#e5ebe7;--canvas:#f5f7f4;--green:#167354;--red:#b43d38}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--canvas);color:var(--ink);font:15px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;align-items:flex-start;justify-content:center;padding:48px 16px}
+    .card{width:min(460px,100%);background:#fff;border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:0 8px 28px rgba(18,47,35,.06)}
+    .brand{display:flex;align-items:center;gap:10px;margin-bottom:20px;font-weight:750}.mark{width:32px;height:32px;border-radius:10px;background:#d9f0e3;color:var(--green);display:grid;place-items:center;font-weight:800}
+    h1{font-size:21px;margin:0 0 6px}p{margin:0 0 14px;color:var(--muted)}.event{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 18px;background:#fbfcfa}.event b{display:block;font-size:16px}.event span{color:var(--muted);font-size:13px}
+    label{display:block;font-size:13px;font-weight:650;margin:12px 0 5px}input[type=email],input[type=text]{width:100%;font:inherit;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+    .consent{display:flex;gap:10px;align-items:flex-start;margin:16px 0;font-size:13px;color:#34463d;font-weight:400}.consent input{margin-top:3px;width:18px;height:18px;flex:0 0 auto}
+    button{font:inherit;font-weight:650;border:0;border-radius:10px;background:var(--green);color:#fff;padding:11px 16px;cursor:pointer;width:100%}button:disabled{opacity:.6;cursor:default}
+    .status{min-height:20px;margin-top:12px;font-size:13px}.status.error{color:var(--red)}.status.ok{color:var(--green);font-weight:650}
+    .fine{font-size:12px;color:var(--muted);margin-top:18px}[hidden]{display:none!important}
+  </style>
+</head>
+<body>
+  <main class="card" aria-live="polite">
+    <div class="brand"><div class="mark">R</div>RainReady</div>
+    <div id="loading"><p>Loading…</p></div>
+
+    <section id="join" hidden>
+      <h1>Get updates about this event</h1>
+      <p>If the organiser moves, postpones or cancels the event because of the weather, you will get an email.</p>
+      <div class="event"><b id="eventName"></b><span id="eventWhen"></span></div>
+      <form id="joinForm" novalidate>
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" required maxlength="254" />
+        <label for="name">Name <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input id="name" type="text" autocomplete="name" maxlength="80" />
+        <label class="consent"><input id="consent" type="checkbox" /><span id="consentText"></span></label>
+        <button id="joinButton" type="submit">Join updates</button>
+      </form>
+      <div class="status" id="joinStatus" role="status"></div>
+      <p class="fine">RainReady keeps your email only for this event's updates. The organiser can see it and can remove it. RainReady is a course-project prototype.</p>
+    </section>
+
+    <section id="unsubscribe" hidden>
+      <h1>Stop event updates</h1>
+      <p>Stop emails about <b id="unsubEvent"></b> to <b id="unsubEmail"></b>?</p>
+      <button id="unsubButton" type="button">Unsubscribe</button>
+      <div class="status" id="unsubStatus" role="status"></div>
+    </section>
+
+    <section id="problem" hidden>
+      <h1>This link does not work</h1>
+      <p id="problemText"></p>
+    </section>
+  </main>
+  <script>
+    const [, kind, token] = location.pathname.match(/^\/(join|unsubscribe)\/([A-Za-z0-9_-]+)$/) || [];
+    const $ = (id) => document.getElementById(id);
+    const show = (id) => { for (const section of ["loading", "join", "unsubscribe", "problem"]) $(section).hidden = section !== id; };
+    const problem = (text) => { $("problemText").textContent = text; show("problem"); };
+    const call = async (method, body) => {
+      const response = await fetch(`/api/public/${kind}/${token}`, { method, headers: body ? { "content-type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Something went wrong. Please try again.");
+      return data;
+    };
+    const formatWhen = (event) => {
+      const date = new Date(`${event.date}T00:00:00+08:00`).toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Singapore" });
+      return `${date} · ${event.time} SGT · ${event.venue}`;
+    };
+    (async () => {
+      if (!kind || !token) return problem("The link is incomplete. Ask the organiser for a new one.");
+      try {
+        const data = await call("GET");
+        if (kind === "join") {
+          $("eventName").textContent = data.event.name;
+          $("eventWhen").textContent = formatWhen(data.event);
+          $("consentText").textContent = data.consentText;
+          document.title = `RainReady — ${data.event.name}`;
+          show("join");
+        } else {
+          $("unsubEvent").textContent = data.eventName;
+          $("unsubEmail").textContent = data.email;
+          if (data.unsubscribed) { $("unsubButton").hidden = true; $("unsubStatus").className = "status ok"; $("unsubStatus").textContent = "You are already unsubscribed."; }
+          show("unsubscribe");
+        }
+      } catch (error) { problem(error.message); }
+    })();
+    $("joinForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const status = $("joinStatus");
+      status.className = "status";
+      if (!$("consent").checked) { status.className = "status error"; status.textContent = "Tick the box to agree to receive event updates."; return; }
+      $("joinButton").disabled = true;
+      try {
+        const data = await call("POST", { email: $("email").value, name: $("name").value, consent: true });
+        $("joinForm").hidden = true;
+        status.className = "status ok";
+        status.textContent = data.message;
+      } catch (error) {
+        status.className = "status error";
+        status.textContent = error.message;
+        $("joinButton").disabled = false;
+      }
+    });
+    $("unsubButton").addEventListener("click", async () => {
+      $("unsubButton").disabled = true;
+      try {
+        await call("POST", {});
+        $("unsubButton").hidden = true;
+        $("unsubStatus").className = "status ok";
+        $("unsubStatus").textContent = "Done. You will not get more emails about this event.";
+      } catch (error) {
+        $("unsubStatus").className = "status error";
+        $("unsubStatus").textContent = error.message;
+        $("unsubButton").disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
