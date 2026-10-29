@@ -18,7 +18,9 @@ The prototype supports:
 - showing a provisional daily planning estimate for 2–4-day events from forecast description, forecast high temperature and event sensitivity, plus tailored preparation suggestions; clearly labels the Singapore-wide daily scope, excludes future PSI and live rainfall, does not score numeric wind without a validated unit, and does not compare venues;
 - applying a backend stop-and-shelter override when an organiser explicitly confirms the local demo lightning alert, without treating the observation feed as an official warning or automatically resuming an activity;
 - searching OneMap by Singapore place name/address, reviewing matching addresses and confirming a result before saving its coordinates;
-- showing one clearly labelled sponsored message (ad) at the bottom of each workspace page for the Free plan, with aggregated impression and click counts for reporting (see below).
+- showing one clearly labelled sponsored message (ad) at the bottom of each workspace page for the Free plan, with aggregated impression and click counts for reporting (see below);
+- letting participants join an event's email updates through a join link with explicit consent, and emailing them when the organiser confirms a relocation, postponement or cancellation;
+- a Plan & billing page with Stripe Checkout in test mode for the Community plan, and developer-only demo tools for comparing the Free and paid plans.
 
 **Safety and scope:** the event-time forecast only covers the event's scheduled start, not its full duration. NEA's 24-hour forecast is regional and its venue-region assignment is an approximation using representative region points; the feed covers currently published periods, not arbitrary future dates. If a period does not cover the start, no score is returned. Primary/backup comparison is a weather-score heuristic only and does not validate access, capacity, shelter, suitability, availability, official safety instructions or full-duration conditions. Routine risk mappings and bands are experimental RainReady assumptions, not official NEA thresholds or a safety guarantee. Current rainfall and historical probability are excluded from event-time scoring; remaining forecast/sensitivity weights are renormalised. The air-quality path reports the nearest region's official 24-hour PSI and follows NEA health-advisory bands, but it is not medical advice and is not folded into the routine weather score. Lightning observations are not an official warning or all-clear; the separate organiser-confirmed alert is an explicit local demo input. Organisers remain responsible for decisions, and the system never auto-resumes an activity. OneMap search is an address-to-coordinate lookup only; organisers must verify the selected result. Authentication is a local course-prototype implementation, not production-hardened identity infrastructure; do not expose it publicly or deploy it to AWS. AWS Cognito, verified email/account recovery/MFA, distributed rate limiting, production monitoring, cloud storage controls and security review are not implemented.
 
@@ -49,9 +51,45 @@ Settings: `RAINREADY_ADS=house` (default) or `off`; `RAINREADY_ADS_FILE` points 
 
 **Changing a plan.** There is no payment integration yet, so an operator changes the plan from the command line, using the organisation ID shown in Settings › Workspace: `npm run plan -- <organizationId>` shows it and `npm run plan -- <organizationId> community` changes it (`free`, `community` or `enterprise`). Members see the change the next time they load the app. Later, a payment provider's webhook would call the same store method (`setOrganizationPlan`) after a successful payment. A PostgreSQL database created earlier needs `migrations/003_organization_plan.sql` once.
 
+## Participant emails
+
+The proposal's rule is kept: **participants are notified only after the organiser confirms a decision.**
+
+1. On an event, the organiser opens **Participants** and creates a **join link**, then shares it (chat group, poster QR code, sign-up form).
+2. A participant opens the link, enters their email (name optional) and must tick a consent box. RainReady stores the exact consent text and time with their record. No account is needed.
+3. When the weather changes and the organiser records **Relocate**, **Postpone** or **Cancel**, the decision form shows "Email N participants when I confirm" with a preview of the email. Confirming saves the decision and sends one email per subscribed participant. Continue and Prepare never email anyone.
+4. Every email has an unsubscribe link (and one-click unsubscribe headers for mail apps). Organisers can remove a participant, which deletes the record. Decision history shows how many were emailed.
+
+Each decision is emailed at most once, even if the request is repeated. Up to 500 participants per event are sent directly from the request; a larger deployment would move sending to a queue (for example SQS) with retries.
+
+Where emails go is a server setting:
+
+| `RAINREADY_MAILER` | What happens |
+|---|---|
+| `outbox` (default) | Nothing leaves the server. Emails are stored and shown on the Developer page's outbox. Use this locally and for rehearsals. |
+| `ses` | Sent through Amazon SES v2 from `RAINREADY_MAIL_FROM`, using the server's AWS credentials (an IAM role in the cloud). Needs `npm install` for `@aws-sdk/client-sesv2`. In the SES sandbox, only verified addresses receive mail, so verify the demo recipients first. |
+
+`RAINREADY_PUBLIC_URL` must be the address participants can open (for example `https://rainready.example.org`), because join and unsubscribe links are built from it. Participant emails are personal data: use only consenting test recipients or the synthetic `@example.com` demo participants, as stated in the proposal.
+
+## Plans and payments (Stripe test mode)
+
+**Plan & billing** shows Free, Community and Enterprise. The organisation owner can upgrade to Community with **Stripe Checkout in test mode**: RainReady creates a Checkout Session, the browser goes to Stripe's page (card `4242 4242 4242 4242`, any future date, any CVC), and on return RainReady asks Stripe for that session and switches the plan only if Stripe says it was paid for this organisation. A signed webhook does the same in the cloud and also handles cancellations made in Stripe. Card details never reach RainReady. Only Stripe **test** keys are accepted; live keys stop the server at start-up.
+
+Setup (free Stripe account, test mode): create a product "RainReady Community" with a recurring monthly price, then set in `.env`: `RAINREADY_STRIPE_SECRET_KEY=sk_test_...` and `RAINREADY_STRIPE_PRICE_COMMUNITY=price_...`. For the webhook on the cloud deployment, add an endpoint `https://<your domain>/api/billing/webhook` for `checkout.session.completed`, `customer.subscription.updated` and `customer.subscription.deleted`, and set `RAINREADY_STRIPE_WEBHOOK_SECRET=whsec_...`. Locally, the webhook is optional (`stripe listen --forward-to localhost:8787/api/billing/webhook` if you have the Stripe CLI). Without Stripe keys, the page says payments are not set up and nobody can upgrade except through `npm run plan` or the developer tools.
+
+## Developer demo tools
+
+For the demo, developers can show the Free and paid plans side by side and show participant emails without real people or real payments. A **Developer** page appears only for listed developer accounts; for everyone else the `/api/dev/*` routes answer 404.
+
+1. Sign up, then copy **Your user ID** from Settings › Workspace.
+2. On the server (local `.env` or the cloud environment), set `RAINREADY_DEMO_TOOLS=true` and `RAINREADY_DEVELOPER_USER_IDS=<id>,<id>`, then restart.
+3. The Developer page can switch the organisation between Free, Community and Enterprise without paying (recorded as a developer change), add synthetic `@example.com` participants to an event, and show the email outbox with the exact text sent.
+
+User IDs are used instead of emails because sign-up does not verify email addresses: anyone could register a developer's email, but nobody can claim an existing user ID. Turn the tools off (`RAINREADY_DEMO_TOOLS=false`) after the demo.
+
 ## Local data and migration
 
-The default database is `backend/data/rainready.sqlite` and is ignored by Git. It stores local accounts, hashed sessions, organisation memberships, invitations, events, decisions, notification previews and aggregated ad counters. Every event row has an organisation ID; the backend verifies membership on each request before returning or changing it. On first start, the backend imports `backend/data/events.json` if it exists, records that the one-time import has completed, and leaves the JSON file untouched as a recovery copy. The first registered workspace takes ownership of imported legacy events. Set `RAINREADY_DB_FILE` and optionally `RAINREADY_LEGACY_DATA_FILE` to use other local paths. Back up the SQLite file before deleting or replacing local data.
+The default database is `backend/data/rainready.sqlite` and is ignored by Git. It stores local accounts, hashed sessions, organisation memberships, invitations, events, decisions, notification previews, aggregated ad counters, consenting participants' emails, participant notifications and billing records. Every event row has an organisation ID; the backend verifies membership on each request before returning or changing it. On first start, the backend imports `backend/data/events.json` if it exists, records that the one-time import has completed, and leaves the JSON file untouched as a recovery copy. The first registered workspace takes ownership of imported legacy events. Set `RAINREADY_DB_FILE` and optionally `RAINREADY_LEGACY_DATA_FILE` to use other local paths. Back up the SQLite file before deleting or replacing local data.
 
 SQLite here is for a single-machine prototype, not a hardened production database. It is not automatically encrypted or backed up. The app stores a participant **count only**, not names, emails, phone numbers or other participant personal data.
 

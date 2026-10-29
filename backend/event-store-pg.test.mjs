@@ -207,3 +207,78 @@ test("PostgreSQL: organisations start on Free and only the plan column can be ch
     await assert.rejects(store.auth.setOrganizationPlan(organizationId, "platinum"), { code: "23514" });
   });
 });
+
+test("PostgreSQL: participants, notifications and billing stay inside their organisation", { skip }, async () => {
+  await withStore(async (store) => {
+    const auth = createAuthService(store.auth);
+    const owner = await auth.register({ email: `notify-${unique()}@example.com`, password: PASSWORD, organizationName: `Notify Club ${unique()}` });
+    const other = await auth.register({ email: `other-${unique()}@example.com`, password: PASSWORD, organizationName: `Other Club ${unique()}` });
+    const organizationId = owner.organizations[0].id;
+    const otherId = other.organizations[0].id;
+    const events = createEventService(store, { organizationId });
+    const event = await events.create(sample);
+    const now = new Date().toISOString();
+    const token = `join-${unique()}-${unique()}-${unique()}`;
+    assert.ok(await store.participants.setJoinLink(organizationId, event.id, token, now));
+    assert.equal(await store.participants.setJoinLink(otherId, event.id, `x-${token}`, now), null, "other organisation cannot add a link");
+    const target = await store.participants.findJoinTarget(token);
+    assert.equal(target.organizationId, organizationId);
+    assert.equal(target.date, "2026-11-18");
+    assert.equal(target.time, "16:00");
+
+    // Two simultaneous sign-ups with the same email (different case) give one participant.
+    const add = (email) => store.participants.add(organizationId, event.id, { email, consentSource: "join_link", consentText: "ok", unsubscribeToken: `u-${unique()}-${unique()}-${unique()}`, now });
+    const results = await Promise.all([add("ana@example.com"), add("ANA@example.com")]);
+    assert.deepEqual(results.map((r) => r.status).sort(), ["already_joined", "joined"]);
+    assert.equal((await store.participants.list(organizationId, event.id)).length, 1);
+    assert.deepEqual(await store.participants.list(otherId, event.id), []);
+    assert.equal((await store.participants.add(otherId, event.id, { email: "x@example.com", consentSource: "join_link", consentText: "x", unsubscribeToken: `u-${unique()}-${unique()}`, now })).error, "event_not_found");
+
+    const [recipient] = await store.participants.recipients(organizationId, event.id);
+    const unsubscribeTarget = await store.participants.findByUnsubscribeToken(recipient.unsubscribeToken);
+    assert.equal(unsubscribeTarget.email, "ana@example.com");
+
+    const result = await events.recordDecision(event.id, { action: "relocate", reason: "Storm" });
+    const created = await store.notifications.create(organizationId, { eventId: event.id, decisionId: result.decision.id, action: "relocate", subject: "s", body: "b", mailer: "outbox", recipients: [recipient], now });
+    assert.equal(created.deliveries.length, 1);
+    const repeat = await store.notifications.create(organizationId, { eventId: event.id, decisionId: result.decision.id, action: "relocate", subject: "s", body: "b", mailer: "outbox", recipients: [recipient], now });
+    assert.equal(repeat.duplicate, true);
+    assert.equal((await store.notifications.create(otherId, { eventId: event.id, decisionId: result.decision.id, action: "relocate", subject: "s", body: "b", mailer: "outbox", recipients: [], now })).error, "decision_not_found");
+    await store.notifications.markDelivery(organizationId, created.deliveries[0].id, { status: "sent", sentAt: now });
+    const finished = await store.notifications.finish(organizationId, created.notification.id, now);
+    assert.equal(finished.sentCount, 1);
+    assert.equal((await store.notifications.outbox(organizationId))[0].email, "ana@example.com");
+    assert.deepEqual(await store.notifications.outbox(otherId), []);
+
+    assert.equal(await store.participants.unsubscribe(recipient.unsubscribeToken, now), true);
+    assert.deepEqual(await store.participants.recipients(organizationId, event.id), []);
+
+    const subscription = await store.billing.apply(organizationId, { provider: "stripe", plan: "community", status: "active", subscriptionId: `sub_${unique()}`, now });
+    assert.equal((await store.auth.getOrganization(organizationId)).plan, "community");
+    assert.equal((await store.billing.findBySubscriptionId(subscription.subscriptionId)).organizationId, organizationId);
+    const eventId = `evt_${unique()}`;
+    assert.equal(await store.billing.recordWebhookEvent(eventId, "test", now), true);
+    assert.equal(await store.billing.recordWebhookEvent(eventId, "test", now), false);
+
+    // Deleting the event removes its participants, link and notifications (cascade).
+    assert.equal(await events.delete(event.id), true);
+    assert.equal(await store.participants.findJoinTarget(token), null);
+  });
+});
+
+test("PostgreSQL: two simultaneous decisions for one event send one email batch", { skip }, async () => {
+  await withStore(async (store) => {
+    const auth = createAuthService(store.auth);
+    const owner = await auth.register({ email: `dup-${unique()}@example.com`, password: PASSWORD, organizationName: `Dup Club ${unique()}` });
+    const organizationId = owner.organizations[0].id;
+    const events = createEventService(store, { organizationId });
+    const event = await events.create(sample);
+    const now = new Date().toISOString();
+    await store.participants.add(organizationId, event.id, { email: "ana@example.com", consentSource: "demo", consentText: "demo", unsubscribeToken: `u-${unique()}-${unique()}-${unique()}`, now });
+    const recipients = await store.participants.recipients(organizationId, event.id);
+    const [a, b] = await Promise.all([events.recordDecision(event.id, { action: "cancel", reason: "Storm" }), events.recordDecision(event.id, { action: "cancel", reason: "Storm" })]);
+    const results = await Promise.all([a, b].map((r) => store.notifications.create(organizationId, { eventId: event.id, decisionId: r.decision.id, action: "cancel", subject: "s", body: "b", mailer: "outbox", recipients, now: new Date().toISOString() })));
+    assert.deepEqual(results.map((r) => Boolean(r.duplicate)).sort(), [false, true]);
+    assert.equal((await store.notifications.outbox(organizationId)).length, 1);
+  });
+});

@@ -8,10 +8,15 @@ import { createEventStore } from "./event-store.mjs";
 import { createEventService, EventValidationError } from "./event-service.mjs";
 import { searchOneMap, GeocodingConfigurationError, GeocodingUpstreamError } from "./geocoding.mjs";
 import { AuthError, createAuthService, clearedSessionCookie, hashToken, readSessionCookie, sessionCookie } from "./auth.mjs";
-import { AD_CONTEXTS, AD_PLACEMENTS, createConfiguredAdService, isAdFreePlan, publicAd, singaporeDay } from "./ads.mjs";
+import { AD_CONTEXTS, AD_PLACEMENTS, PLANS, createConfiguredAdService, isAdFreePlan, publicAd, singaporeDay } from "./ads.mjs";
+import { ParticipantValidationError, consentText, demoParticipants, isToken, joinUrl, newToken, validateJoin } from "./participants.mjs";
+import { NOTIFY_ACTIONS, composeDecisionEmail, createConfiguredMailer, notifyParticipants, publicUrlFromEnv, renderBody } from "./notifications.mjs";
+import { BillingError, applyStripeEvent, billingConfigFromEnv, createStripeClient, currentPlanFromStripe, planCatalogue, planFromCheckoutSession, verifyStripeSignature } from "./billing.mjs";
+import { developerConfigFromEnv, isDeveloper } from "./developer.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendPath = path.join(root, "frontend", "index.html");
+const participantPagePath = path.join(root, "frontend", "join.html");
 assertLocalPrototypeSafeEnvironment();
 
 /**
@@ -34,6 +39,11 @@ export async function createConfiguredStore(environment = process.env) {
 const eventStore = await createConfiguredStore();
 // RAINREADY_ADS=house (default) or off. A broken ad catalogue stops start-up with a clear message.
 const configuredAds = createConfiguredAdService();
+// Participant emails (RAINREADY_MAILER=outbox|ses), Stripe test-mode billing and developer demo
+// tools are configured from the environment; a bad setting stops start-up with a clear message.
+const configuredMailer = createConfiguredMailer();
+const configuredBilling = billingConfigFromEnv();
+const configuredDeveloper = developerConfigFromEnv();
 
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
@@ -73,6 +83,22 @@ function parseEventDateTime(value) {
   return `${value}:00+08:00`;
 }
 
+async function readRawBody(request, limit = 65_536) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > limit) throw new RangeError(`request body must be ${Math.round(limit / 1024)} KB or smaller`);
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+const maskEmail = (email) => {
+  const [local, domain] = String(email).split("@");
+  return `${local.slice(0, 1)}${"•".repeat(Math.max(1, Math.min(6, local.length - 1)))}@${domain}`;
+};
+
 async function readJsonBody(request) {
   let body = "";
   for await (const chunk of request) {
@@ -86,8 +112,12 @@ async function readJsonBody(request) {
   }
 }
 
-export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchOneMap, cache = new Map(), store = eventStore, ads = configuredAds } = {}) {
+export function createServer({
+  snapshot = getWeatherSnapshot, geocoder = searchOneMap, cache = new Map(), store = eventStore, ads = configuredAds,
+  mailer = configuredMailer, billing = configuredBilling, stripe = createStripeClient(billing), developer = configuredDeveloper,
+} = {}) {
   assertLocalPrototypeSafeEnvironment();
+  const publicUrl = mailer.publicUrl ?? publicUrlFromEnv();
   const auth = createAuthService(store.auth);
   const allowedOrigins = (process.env.RAINREADY_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
   const currentSession = async (request) => auth.resolveSession(readSessionCookie(request));
@@ -123,6 +153,97 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
       });
     }
 
+
+    // ---- Public participant pages (no account) ----------------------------------
+    // A participant joins an event's email updates through the organiser's join link, and can
+    // unsubscribe from any email. These pages know only a random token.
+    const participantPage = url.pathname.match(/^\/(join|unsubscribe)\/([A-Za-z0-9_-]{20,64})$/);
+    if (participantPage && request.method === "GET") {
+      try {
+        const html = await readFile(participantPagePath);
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "no-referrer", "x-robots-tag": "noindex" });
+        return response.end(html);
+      } catch {
+        return sendJson(response, 500, { error: "frontend_unavailable" });
+      }
+    }
+    // One-click unsubscribe from the email's List-Unsubscribe header (RFC 8058): mail apps POST
+    // here directly, so there is no same-origin check. It can only unsubscribe that one address.
+    if (participantPage && participantPage[1] === "unsubscribe" && request.method === "POST") {
+      await readRawBody(request, 4096).catch(() => "");
+      await store.participants.unsubscribe(participantPage[2], new Date().toISOString());
+      return sendJson(response, 200, { unsubscribed: true });
+    }
+
+    const publicRoute = url.pathname.match(/^\/api\/public\/(join|unsubscribe)\/([^/]+)$/);
+    if (publicRoute) {
+      const [, kind, token] = publicRoute;
+      const limit = await store.auth.consumeRateLimit({
+        // Separate counters for page loads and sign-ups. Generous enough for a shared campus or venue
+        // network (one IP for many people). Behind a load balancer, the client IP must come from a
+        // trusted proxy header instead of the socket address (not configured in this prototype).
+        keyHash: hashToken(`public-${kind}-${request.method === "GET" ? "view" : "submit"}:${request.socket.remoteAddress ?? "local"}`),
+        now: Date.now(), windowMs: 15 * 60 * 1000, maxAttempts: request.method === "GET" ? 300 : 60,
+      });
+      if (!limit.allowed) {
+        response.setHeader("retry-after", String(limit.retryAfterSeconds));
+        return sendJson(response, 429, { error: "rate_limited", message: "Too many attempts. Wait 15 minutes and try again." });
+      }
+      if (request.method === "POST" && !sameOriginMutation(request)) return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
+      if (!isToken(token)) return sendJson(response, 404, { error: "link_not_found", message: "This link is not valid. Ask the organiser for a new one." });
+      if (kind === "join") {
+        const target = await store.participants.findJoinTarget(token);
+        if (!target) return sendJson(response, 404, { error: "link_not_found", message: "This join link is not valid any more. Ask the organiser for a new one." });
+        if (request.method === "GET") {
+          return sendJson(response, 200, { event: { name: target.name, date: target.date, time: target.time, venue: target.venue }, consentText: consentText(target.name) });
+        }
+        if (request.method === "POST") {
+          try {
+            const fields = validateJoin(await readJsonBody(request), target);
+            const result = await store.participants.add(target.organizationId, target.eventId, { ...fields, unsubscribeToken: newToken(), now: new Date().toISOString() });
+            if (result.error === "list_full") return sendJson(response, 409, { error: "list_full", message: "This event's update list is full. Contact the organiser." });
+            if (result.error) return sendJson(response, 404, { error: "link_not_found", message: "This join link is not valid any more." });
+            // Same answer whether the address was new or already on the list.
+            return sendJson(response, 200, { joined: true, message: `You will get email updates about ${target.name}. Every email has an unsubscribe link.` });
+          } catch (error) {
+            if (error instanceof ParticipantValidationError || error instanceof EventValidationError || error instanceof RangeError) {
+              return sendJson(response, 400, { error: "invalid_join", message: error.message });
+            }
+            throw error;
+          }
+        }
+      }
+      if (kind === "unsubscribe") {
+        const target = await store.participants.findByUnsubscribeToken(token);
+        if (!target) return sendJson(response, 404, { error: "link_not_found", message: "This unsubscribe link is not valid. You may already have been removed by the organiser." });
+        if (request.method === "GET") return sendJson(response, 200, { eventName: target.eventName, email: maskEmail(target.email), unsubscribed: target.unsubscribed });
+        if (request.method === "POST") {
+          await store.participants.unsubscribe(token, new Date().toISOString());
+          return sendJson(response, 200, { unsubscribed: true, eventName: target.eventName });
+        }
+      }
+      return sendJson(response, 405, { error: "method_not_allowed" });
+    }
+
+    // ---- Stripe webhook (signed; no session) -------------------------------------
+    if (url.pathname === "/api/billing/webhook" && request.method === "POST") {
+      if (!billing.webhookSecret || !stripe) return sendJson(response, 404, { error: "not_found" });
+      let raw;
+      try { raw = await readRawBody(request); } catch { return sendJson(response, 413, { error: "payload_too_large" }); }
+      if (!verifyStripeSignature(raw, request.headers["stripe-signature"], billing.webhookSecret)) {
+        return sendJson(response, 400, { error: "invalid_signature" });
+      }
+      let event;
+      try { event = JSON.parse(raw); } catch { return sendJson(response, 400, { error: "invalid_payload" }); }
+      if (typeof event?.id !== "string" || typeof event?.type !== "string") return sendJson(response, 400, { error: "invalid_payload" });
+      // The plan is taken from the subscription's CURRENT state in Stripe, so repeated, replayed or
+      // out-of-order deliveries are harmless. Recorded after applying, so a failure makes Stripe retry.
+      const outcome = await applyStripeEvent(store, stripe, event);
+      const firstTime = await store.billing.recordWebhookEvent(event.id, event.type, new Date().toISOString());
+      console.log(`Stripe webhook ${event.type}${firstTime ? "" : " (repeat)"}: ${outcome}`);
+      return sendJson(response, 200, { received: true });
+    }
+
     if (request.method === "POST" && ["/api/auth/register", "/api/auth/login"].includes(url.pathname)) {
       const isRegister = url.pathname.endsWith("register");
       const bucket = `${isRegister ? "register" : "login"}:${request.socket.remoteAddress ?? "local"}`;
@@ -142,6 +263,7 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
           user: result.user,
           organizations: result.organizations,
           expiresAt: result.session.expiresAt,
+          developer: isDeveloper(developer, result.user),
         });
       } catch (error) {
         if (error instanceof AuthError) return sendJson(response, error.status, { error: error.code, message: error.message });
@@ -173,6 +295,7 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
         user: session.user,
         organizations: await store.auth.listMemberships(session.user.id),
         expiresAt: session.expiresAt,
+        developer: isDeveloper(developer, session.user),
       });
     }
 
@@ -303,6 +426,157 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
     }
     const events = activeOrganization ? createEventService(store, { organizationId: activeOrganization.id }) : null;
 
+    // ---- Participants (organiser side) ----------------------------------------
+    if (url.pathname === "/api/participants/counts" && request.method === "GET") {
+      return sendJson(response, 200, { counts: await store.participants.counts(activeOrganization.id) });
+    }
+    const participantsRoute = url.pathname.match(/^\/api\/events\/([^/]+)\/(participants|join-link)(?:\/([^/]+))?$/);
+    if (participantsRoute) {
+      let eventId;
+      let participantId = null;
+      try {
+        eventId = decodeURIComponent(participantsRoute[1]);
+        if (participantsRoute[3]) participantId = decodeURIComponent(participantsRoute[3]);
+      } catch { return sendJson(response, 400, { error: "invalid_id" }); }
+      const event = await events.get(eventId);
+      if (!event) return sendJson(response, 404, { error: "event_not_found" });
+      const joinLinkView = (link) => link ? { url: joinUrl(publicUrl, link.token), createdAt: link.createdAt } : null;
+      if (participantsRoute[2] === "participants" && !participantId && request.method === "GET") {
+        const [participants, link] = await Promise.all([store.participants.list(activeOrganization.id, eventId), store.participants.getJoinLink(activeOrganization.id, eventId)]);
+        return sendJson(response, 200, {
+          participants, joinLink: joinLinkView(link), consentText: consentText(event.name),
+          notifyActions: NOTIFY_ACTIONS, mailer: mailer.name,
+        });
+      }
+      if (participantsRoute[2] === "participants" && participantId && request.method === "DELETE") {
+        const removed = await store.participants.remove(activeOrganization.id, eventId, participantId);
+        return removed ? sendJson(response, 200, { removed: true }) : sendJson(response, 404, { error: "participant_not_found" });
+      }
+      if (participantsRoute[2] === "join-link" && !participantId && request.method === "POST") {
+        const link = await store.participants.setJoinLink(activeOrganization.id, eventId, newToken(), new Date().toISOString());
+        return link ? sendJson(response, 201, { joinLink: joinLinkView(link) }) : sendJson(response, 404, { error: "event_not_found" });
+      }
+      return sendJson(response, 405, { error: "method_not_allowed" });
+    }
+    const previewRoute = url.pathname.match(/^\/api\/events\/([^/]+)\/notification-preview$/);
+    if (previewRoute && request.method === "GET") {
+      let eventId;
+      try { eventId = decodeURIComponent(previewRoute[1]); } catch { return sendJson(response, 400, { error: "invalid_id" }); }
+      const action = url.searchParams.get("action");
+      const event = await events.get(eventId);
+      if (!event) return sendJson(response, 404, { error: "event_not_found" });
+      if (!NOTIFY_ACTIONS.includes(action)) return sendJson(response, 200, { notifies: false, recipientCount: 0 });
+      if (action === "relocate" && !event.backupVenue) return sendJson(response, 200, { notifies: false, recipientCount: 0 });
+      const recipients = await store.participants.recipients(activeOrganization.id, eventId);
+      const reason = (url.searchParams.get("reason") ?? "").slice(0, 1000) || "(the reason you enter)";
+      const email = composeDecisionEmail({ event, decision: { action, reason }, organizationName: activeOrganization.name });
+      return sendJson(response, 200, { notifies: true, recipientCount: recipients.length, mailer: mailer.name, subject: email.subject, body: renderBody(email.body, publicUrl, "UNSUBSCRIBE-LINK-PER-RECIPIENT").replace(/\/unsubscribe\/UNSUBSCRIBE-LINK-PER-RECIPIENT/, "/unsubscribe/…") });
+    }
+    if (url.pathname === "/api/notifications" && request.method === "GET") {
+      return sendJson(response, 200, { notifications: await store.notifications.list(activeOrganization.id, { eventId: url.searchParams.get("eventId") || null, limit: 200 }) });
+    }
+
+    // ---- Plan and billing ------------------------------------------------------
+    const billingView = async () => {
+      const subscription = await store.billing.get(activeOrganization.id);
+      const organization = await store.auth.getOrganization(activeOrganization.id);
+      return {
+        plan: organization?.plan ?? "free",
+        subscription: subscription ? { provider: subscription.provider, plan: subscription.plan, status: subscription.status, updatedAt: subscription.updatedAt } : null,
+        plans: planCatalogue(billing),
+        stripeEnabled: Boolean(stripe),
+        testMode: true,
+        canManage: activeOrganization.role === "owner",
+      };
+    };
+    if (url.pathname.startsWith("/api/billing")) {
+      try {
+        if (url.pathname === "/api/billing" && request.method === "GET") return sendJson(response, 200, await billingView());
+        if (url.pathname === "/api/billing/confirm" && request.method === "POST") {
+          // Any member returning from Stripe may confirm: the session must be paid AND belong to this organisation.
+          if (!stripe) throw new BillingError(503, "payments_not_configured", "Payments are not configured on this server.");
+          const sessionId = (await readJsonBody(request))?.sessionId;
+          if (typeof sessionId !== "string" || !/^cs_test_[A-Za-z0-9]+$/.test(sessionId)) throw new BillingError(400, "invalid_session", "That payment session is not valid.");
+          const change = planFromCheckoutSession(await stripe.retrieveCheckoutSession(sessionId), activeOrganization.id);
+          if (!change) throw new BillingError(409, "payment_not_complete", "Stripe has not confirmed a payment for this organisation.");
+          // A paid session stays "paid" for ever: grant the plan only if its subscription is active NOW.
+          const current = await currentPlanFromStripe(stripe, change.subscriptionId);
+          if (!current || current.plan !== "community" || (current.organizationId && current.organizationId !== activeOrganization.id)) {
+            throw new BillingError(409, "subscription_not_active", "This payment's subscription is no longer active. Start a new upgrade.");
+          }
+          await store.billing.apply(activeOrganization.id, {
+            provider: "stripe", plan: "community", status: current.status, subscriptionId: current.subscriptionId,
+            customerId: current.customerId, checkoutSessionId: change.checkoutSessionId, now: new Date().toISOString(),
+          });
+          return sendJson(response, 200, await billingView());
+        }
+        if (activeOrganization.role !== "owner") throw new BillingError(403, "owner_required", "Only the organisation owner can change the plan.");
+        if (url.pathname === "/api/billing/checkout" && request.method === "POST") {
+          if (!stripe) throw new BillingError(503, "payments_not_configured", "Payments are not configured on this server.");
+          if ((await store.auth.getOrganization(activeOrganization.id))?.plan !== "free") throw new BillingError(409, "already_subscribed", "This organisation is already on a paid plan.");
+          const existing = await store.billing.get(activeOrganization.id);
+          if (existing?.subscriptionId && (await currentPlanFromStripe(stripe, existing.subscriptionId))?.plan === "community") {
+            throw new BillingError(409, "already_subscribed", "This organisation already has an active Stripe subscription. Reload the page.");
+          }
+          const checkout = await stripe.createCheckoutSession({ organizationId: activeOrganization.id, email: session.user.email, publicUrl });
+          if (typeof checkout?.url !== "string" || !checkout.url.startsWith("https://checkout.stripe.com/")) throw new BillingError(502, "stripe_error", "Stripe did not return a checkout page.");
+          return sendJson(response, 201, { url: checkout.url });
+        }
+        if (url.pathname === "/api/billing/cancel" && request.method === "POST") {
+          const current = await store.billing.get(activeOrganization.id);
+          if (current?.subscriptionId) {
+            if (!stripe) throw new BillingError(503, "payments_not_configured", "Payments are not configured on this server.");
+            // Already cancelled in Stripe (for example from the Stripe dashboard): just record it.
+            const live = await currentPlanFromStripe(stripe, current.subscriptionId);
+            if (live && live.status !== "canceled") await stripe.cancelSubscription(current.subscriptionId);
+          }
+          await store.billing.apply(activeOrganization.id, { provider: current?.provider ?? "stripe", plan: "free", status: "canceled", now: new Date().toISOString() });
+          return sendJson(response, 200, await billingView());
+        }
+        return sendJson(response, 404, { error: "not_found" });
+      } catch (error) {
+        if (error instanceof BillingError) return sendJson(response, error.status, { error: error.code, message: error.message });
+        throw error;
+      }
+    }
+
+    // ---- Developer-only demo tools (404 for everyone else) -----------------------
+    if (url.pathname.startsWith("/api/dev/")) {
+      if (!isDeveloper(developer, session.user)) return sendJson(response, 404, { error: "not_found" });
+      if (url.pathname === "/api/dev/status" && request.method === "GET") {
+        return sendJson(response, 200, { mailer: mailer.name, publicUrl, stripeEnabled: Boolean(stripe), webhookConfigured: Boolean(billing.webhookSecret), plan: (await store.auth.getOrganization(activeOrganization.id))?.plan ?? "free" });
+      }
+      if (url.pathname === "/api/dev/plan" && request.method === "POST") {
+        const plan = (await readJsonBody(request))?.plan;
+        if (!PLANS.includes(plan)) return sendJson(response, 400, { error: "invalid_plan", message: `plan must be ${PLANS.join(", ")}` });
+        await store.billing.apply(activeOrganization.id, { provider: "developer", plan, status: plan === "free" ? "canceled" : "demo", now: new Date().toISOString() });
+        console.log(`Developer ${session.user.id} switched organisation ${activeOrganization.id} to ${plan} (demo, no payment)`);
+        return sendJson(response, 200, { plan });
+      }
+      const demoRoute = url.pathname.match(/^\/api\/dev\/events\/([^/]+)\/demo-participants$/);
+      if (demoRoute && request.method === "POST") {
+        let eventId;
+        try { eventId = decodeURIComponent(demoRoute[1]); } catch { return sendJson(response, 400, { error: "invalid_id" }); }
+        const count = Number((await readJsonBody(request).catch(() => ({})))?.count ?? 3);
+        const added = [];
+        for (const person of demoParticipants(count)) {
+          const result = await store.participants.add(activeOrganization.id, eventId, { ...person, unsubscribeToken: newToken(), now: new Date().toISOString() });
+          if (result.error) return sendJson(response, 404, { error: "event_not_found" });
+          added.push(result.participant);
+        }
+        return sendJson(response, 201, { added });
+      }
+      if (url.pathname === "/api/dev/outbox" && request.method === "GET") {
+        // In outbox mode nothing was sent, so the link is shown for the demo. For emails that really
+        // went out (SES), the participant's personal unsubscribe link is not shown to developers.
+        const emails = (await store.notifications.outbox(activeOrganization.id, { limit: 100 })).map(({ unsubscribeToken, body, ...email }) => ({
+          ...email, body: email.mailer === "outbox" && unsubscribeToken ? renderBody(body, publicUrl, unsubscribeToken) : body.split("{{unsubscribe_url}}").join(`${publicUrl}/unsubscribe/(personal link, hidden)`),
+        }));
+        return sendJson(response, 200, { mailer: mailer.name, emails });
+      }
+      return sendJson(response, 404, { error: "not_found" });
+    }
+
     if (request.method === "GET" && url.pathname === "/api/geocode") {
       const query = (url.searchParams.get("query") ?? "").trim();
       if (query.length < 3 || query.length > 120) {
@@ -361,10 +635,29 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
       }
       if (request.method === "POST") {
         try {
-          const result = await events.recordDecision(id, await readJsonBody(request));
-          return result
-            ? sendJson(response, 201, { decision: result.decision, event: result.event })
-            : sendJson(response, 404, { error: "event_not_found" });
+          const body = await readJsonBody(request);
+          const result = await events.recordDecision(id, body);
+          if (!result) return sendJson(response, 404, { error: "event_not_found" });
+          // Participants are emailed only when the organiser confirmed with "Email participants"
+          // ticked, and only for relocate, postpone or cancel. The decision is saved either way.
+          let notification = { status: "not_requested" };
+          if (body?.notifyParticipants === true && NOTIFY_ACTIONS.includes(result.decision.action)) {
+            try {
+              const sent = await notifyParticipants({
+                store, mailer, organizationId: activeOrganization.id, organizationName: activeOrganization.name,
+                event: result.event, decision: result.decision, userId: session.user.id,
+              });
+              notification = sent.skipped
+                ? { status: "skipped", reason: sent.skipped }
+                : sent.duplicate
+                  ? { status: "skipped", reason: "already_emailed_recently" }
+                : { status: sent.notification.failedCount ? "partly_failed" : "sent", mailer: sent.notification.mailer, recipientCount: sent.notification.recipientCount, sentCount: sent.notification.sentCount, failedCount: sent.notification.failedCount };
+            } catch (error) {
+              console.error("RainReady could not notify participants:", error);
+              notification = { status: "failed", reason: "notification_error" };
+            }
+          }
+          return sendJson(response, 201, { decision: result.decision, event: result.event, notification });
         } catch (error) {
           const status = error instanceof EventValidationError || error instanceof RangeError ? 400 : 500;
           return sendJson(response, status, { error: status === 400 ? "invalid_decision" : "event_store_error", message: error.message });

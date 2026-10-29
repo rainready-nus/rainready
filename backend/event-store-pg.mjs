@@ -11,6 +11,7 @@
  * Schema: database/postgres/init/*.sql. Connect as the least-privilege role rainready_app.
  */
 import { randomUUID } from "node:crypto";
+import { createPgNotificationStore } from "./notification-store-pg.mjs";
 import { readFileSync } from "node:fs";
 import pg from "pg";
 
@@ -308,6 +309,7 @@ export function createPgEventStore(config) {
   return {
     auth,
     ads,
+    ...createPgNotificationStore({ pool, transaction, forOrganization }),
     driver: "postgres",
     async list(organizationId) {
       return forOrganization(organizationId, async (client) => {

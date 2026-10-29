@@ -15,6 +15,7 @@
     "plan": "node --env-file-if-exists=.env backend/plan.mjs"
   },
   "dependencies": {
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "@aws-sdk/client-sesv2": "^3.1159.0"
   }
 }

@@ -31,6 +31,15 @@
     .ad-slot{margin:28px 0 0;border:1px solid var(--line);border-radius:14px;background:#fbfcfa;padding:11px 16px 14px}.ad-slot[hidden]{display:none}.ad-label{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:#87938c;font-weight:700}.ad-hide{border:0;background:none;padding:2px 0;color:#6d7b74;font-size:11px;font-weight:500;letter-spacing:0;text-transform:none;text-decoration:underline}.ad-body{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 18px;align-items:center;color:inherit;text-decoration:none;border-radius:8px}.ad-sponsor{font-size:11px;color:var(--muted)}.ad-headline{font-size:14px;font-weight:650}.ad-text{font-size:12px;color:#53645b}.ad-cta{grid-column:2;grid-row:1/4;border:1px solid var(--line);border-radius:9px;padding:8px 12px;background:#fff;color:var(--green);font-size:12px;font-weight:650;white-space:nowrap}.ad-cta small{display:block;color:var(--muted);font-size:10px;font-weight:400}.ad-body:hover .ad-cta{border-color:var(--green)}.ad-body:focus-visible{outline:2px solid var(--green);outline-offset:4px}
     @media(max-width:600px){.ad-body{grid-template-columns:1fr}.ad-cta{grid-column:1;grid-row:auto;justify-self:start;margin-top:7px}}
     @media print{.ad-slot{display:none!important}}
+    .nav button[hidden]{display:none!important}
+    .plan-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.plan-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:18px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow)}.plan-card.current{border-color:var(--green);box-shadow:0 0 0 2px #16735422}.plan-card h2{margin:0;font-size:16px}.plan-price{font-size:22px;font-weight:750;letter-spacing:-.4px}.plan-card ul{margin:0;padding-left:18px;color:#34463d;font-size:13px;display:grid;gap:4px}.plan-card .primary,.plan-card .secondary{margin-top:auto;align-self:flex-start}.plan-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--green);background:var(--mint);border-radius:20px;padding:3px 8px}
+    .info-note{border:1px solid #cfe0f3;background:var(--blue-bg);color:#284d7c;border-radius:10px;padding:10px 12px;font-size:12px;margin:0 0 14px}.dev-banner{border:1px dashed #b98a2b;background:#fff8e9;color:#704d12;border-radius:10px;padding:10px 12px;font-size:12px;margin:0 0 14px}
+    .participant-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}.participant-row:last-child{border-bottom:0}.participant-row small{display:block;color:var(--muted);font-size:11px}.participant-row.unsubscribed b{color:var(--muted);text-decoration:line-through}
+    .copy-row{display:flex;gap:8px;align-items:center}.copy-row input{flex:1;min-width:0;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;background:#f8faf8;color:var(--ink)}
+    .notify-block{border:1px solid #cfe0f3;background:var(--blue-bg);border-radius:10px;padding:11px 12px;margin-top:14px;font-size:12px;color:#284d7c}.notify-block label{display:flex;gap:9px;align-items:flex-start;font-weight:650;color:var(--ink);font-size:13px}.notify-block input{margin-top:3px}.notify-block details{margin-top:8px}.notify-block summary{cursor:pointer;font-weight:600}.notify-block pre{white-space:pre-wrap;font:12px/1.45 ui-sans-serif,system-ui,sans-serif;background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;margin:8px 0 0;color:var(--ink)}
+    .outbox-item{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:#fff}.outbox-item header{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)}.outbox-item b{color:var(--ink);font-size:13px}.outbox-item pre{white-space:pre-wrap;font:12px/1.45 ui-sans-serif,system-ui,sans-serif;background:#f8faf8;border-radius:8px;padding:10px;margin:8px 0 0}
+    .button-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    @media(max-width:900px){.plan-grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -38,7 +47,7 @@
     <aside>
       <div class="brand"><div class="brand-mark">R</div><div><div class="brand-name">RainReady</div><div class="brand-sub">Outdoor event safety desk</div></div></div>
       <div class="org-switch"><small>WORKSPACE</small>NUS Student Organisations　⌄</div>
-      <div><div class="nav-label">Workspace</div><nav class="nav"><button type="button" class="active" data-view="overview" aria-current="page"><span class="ico">▦</span>Overview</button><button type="button" data-view="events"><span class="ico">▣</span>Events</button><button type="button" data-view="decisions"><span class="ico">◷</span>Decision history</button><button type="button" data-view="settings"><span class="ico">⚙</span>Settings</button></nav></div>
+      <div><div class="nav-label">Workspace</div><nav class="nav"><button type="button" class="active" data-view="overview" aria-current="page"><span class="ico">▦</span>Overview</button><button type="button" data-view="events"><span class="ico">▣</span>Events</button><button type="button" data-view="decisions"><span class="ico">◷</span>Decision history</button><button type="button" data-view="settings"><span class="ico">⚙</span>Settings</button><button type="button" data-view="billing"><span class="ico">◇</span>Plan &amp; billing</button><button type="button" data-view="developer" id="navDeveloper" hidden><span class="ico">⌘</span>Developer</button></nav></div>
       <div class="aside-bottom">Safety decisions remain with the event organiser.<div class="profile"><div class="avatar">RR</div><div><b id="currentUserEmail">Signed out</b><small id="currentUserRole">Organisation member</small></div></div></div>
     </aside>
     <main>
@@ -86,11 +95,29 @@
         <div id="view-settings" data-view-panel="settings" hidden>
           <div class="welcome"><div><h1>Settings</h1><p>Your workspace, its members and your sign-in sessions.</p></div></div>
           <div class="settings-grid">
-            <section class="panel"><div class="panel-head"><div><h2>Workspace</h2><p>The organisation you are working in now.</p></div></div><dl class="kv"><dt>Organisation</dt><dd id="settingsOrgName">—</dd><dt>Your role</dt><dd id="settingsRole">—</dd><dt>Plan</dt><dd id="settingsPlan">—</dd><dt>Sponsored messages</dt><dd id="settingsAds">—</dd><dt>Signed in as</dt><dd id="settingsEmail">—</dd><dt>Organisation ID</dt><dd id="settingsOrgId">—</dd><dt>Database</dt><dd id="settingsStorage">Checking…</dd><dt>App version</dt><dd id="settingsVersion">—</dd></dl></section>
+            <section class="panel"><div class="panel-head"><div><h2>Workspace</h2><p>The organisation you are working in now.</p></div></div><dl class="kv"><dt>Organisation</dt><dd id="settingsOrgName">—</dd><dt>Your role</dt><dd id="settingsRole">—</dd><dt>Plan</dt><dd id="settingsPlan">—</dd><dt>Sponsored messages</dt><dd id="settingsAds">—</dd><dt>Signed in as</dt><dd id="settingsEmail">—</dd><dt>Your user ID</dt><dd id="settingsUserId">—</dd><dt>Organisation ID</dt><dd id="settingsOrgId">—</dd><dt>Database</dt><dd id="settingsStorage">Checking…</dd><dt>App version</dt><dd id="settingsVersion">—</dd></dl></section>
             <section class="panel"><div class="panel-head"><div><h2>Members</h2><p>People who can see and change this organisation's events.</p></div><button class="secondary" type="button" id="settingsInviteButton" hidden>Invite member</button></div><div id="settingsMembers" aria-live="polite"></div><p class="muted-note" id="settingsMembersNote"></p></section>
             <section class="panel"><div class="panel-head"><div><h2>Sessions</h2><p>Sessions last 12 hours. Signing out everywhere ends every session for your account.</p></div></div><div class="settings-actions"><button class="secondary" type="button" id="settingsSignOut">Sign out</button><button class="secondary" type="button" id="settingsSignOutAll">Sign out all devices</button></div></section>
             <section class="panel"><div class="panel-head"><div><h2>This browser</h2><p>Kept only in this browser, not in the database.</p></div></div><dl class="kv"><dt>Activity log</dt><dd id="settingsLogCount">—</dd><dt>Demo lightning alert</dt><dd id="settingsLightning">—</dd></dl><div class="settings-actions" style="margin-top:14px"><button class="secondary" type="button" id="settingsClearLog">Clear activity log</button></div></section>
           </div>
+        </div>
+
+        <div id="view-billing" data-view-panel="billing" hidden>
+          <div class="welcome"><div><h1>Plan &amp; billing</h1><p>Your organisation's plan. Paid plans remove sponsored messages.</p></div></div>
+          <p class="info-note" id="billingNote">Loading…</p>
+          <div class="plan-grid" id="planGrid"></div>
+          <p class="muted-note" id="billingFoot" style="margin-top:14px"></p>
+        </div>
+
+        <div id="view-developer" data-view-panel="developer" hidden>
+          <div class="welcome"><div><h1>Developer demo tools</h1><p>Only for developer accounts listed on the server. Use them to compare the Free and paid plans and to show participant emails in a demo.</p></div></div>
+          <p class="dev-banner" id="devStatus">Loading…</p>
+          <div class="settings-grid">
+            <section class="panel"><div class="panel-head"><div><h2>Switch plan (demo, no payment)</h2><p>Changes this organisation's plan immediately. Recorded as a developer change, not a payment.</p></div></div><div class="button-row" id="devPlanButtons"><button class="secondary" type="button" data-dev-plan="free">Free (with ads)</button><button class="secondary" type="button" data-dev-plan="community">Community (ad-free)</button><button class="secondary" type="button" data-dev-plan="enterprise">Enterprise</button></div></section>
+            <section class="panel"><div class="panel-head"><div><h2>Demo participants</h2><p>Adds synthetic participants with example.com addresses, so emails never reach a real person.</p></div></div><div class="button-row"><select id="devEventSelect" aria-label="Event for demo participants" style="border:1px solid var(--line);border-radius:9px;padding:8px 10px;max-width:100%"></select><button class="secondary" type="button" id="devAddParticipants">Add 3 demo participants</button></div></section>
+          </div>
+          <div class="section-heading"><div><h2>Email outbox</h2><p>Every participant email this organisation sent, newest first, with the exact text.</p></div><button class="secondary" type="button" id="devRefreshOutbox">Refresh</button></div>
+          <div id="devOutbox"></div>
         </div>
         <section class="ad-slot" id="adSlot" aria-label="Sponsored message" hidden><div class="ad-label"><span>Sponsored</span><button type="button" class="ad-hide" id="adUpgrade">Remove ads</button></div><a class="ad-body" id="adLink" href="#" target="_blank" rel="sponsored noopener noreferrer"><span class="ad-sponsor" id="adSponsor"></span><span class="ad-headline" id="adHeadline"></span><span class="ad-text" id="adText"></span><span class="ad-cta"><span id="adCta"></span> ↗<small id="adHost"></small></span></a></section>
         <div class="footer-note">RainReady is a course-project prototype. Sample scores are illustrative and must not be used for real event safety decisions.</div>
@@ -119,8 +146,13 @@
     <div class="field"><label for="activityType">Activity type</label><select id="activityType" name="type"><option>Sports</option><option>Performance</option><option>Community gathering</option><option>Other</option></select></div>
     <div class="field"><label for="sensitivity">Weather sensitivity</label><select id="sensitivity" name="sensitivity"><option value="medium">Medium</option><option value="low">Low — sheltered / flexible</option><option value="high">High — limited shelter / vulnerable participants</option></select></div>
   </div><div class="form-actions"><button class="secondary" type="button" id="cancelModal">Cancel</button><button class="primary" type="submit" id="saveEventButton">Save event</button></div></form></div></div>
-  <div class="modal-backdrop" id="decisionModal" role="dialog" aria-modal="true" aria-labelledby="decisionTitle"><div class="modal"><div class="modal-head"><div><h2 id="decisionTitle">Record organiser decision</h2><p>This decision and its reason will be saved to the event record.</p></div><button class="close" id="closeDecisionModal" aria-label="Close">×</button></div><form id="decisionForm"><div class="form-grid"><div class="field full"><label for="decisionAction">Decision</label><select id="decisionAction" name="action" required><option value="continue">Continue as planned</option><option value="prepare">Prepare contingency plan</option><option value="relocate">Relocate to backup venue</option><option value="postpone">Postpone</option><option value="cancel">Cancel</option></select></div><div class="field full"><label for="decisionReason">Reason for this decision</label><textarea id="decisionReason" name="reason" rows="4" maxlength="1000" required placeholder="Briefly explain the organiser's decision"></textarea></div></div><p class="test-mode-note" style="margin:14px 0 0">Notification is in test mode. Confirming will save the decision and create a preview only; no message will be sent.</p><div class="form-actions"><button class="secondary" type="button" id="cancelDecision">Cancel</button><button class="primary" type="submit" id="saveDecisionButton">Confirm decision & preview notification</button></div></form></div></div>
-  <div class="modal-backdrop" id="notificationModal" role="dialog" aria-modal="true" aria-labelledby="notificationTitle"><div class="modal"><div class="modal-head"><div><h2 id="notificationTitle">Test notification preview</h2><p>Generated from the confirmed organiser decision.</p></div><button class="close" id="closeNotificationModal" aria-label="Close">×</button></div><p class="test-mode-note" id="notificationStatus">TEST MODE — not sent.</p><div class="notification-preview" id="notificationPreview"></div><div class="form-actions"><button class="primary" type="button" id="doneNotification">Done</button></div></div></div>
+  <div class="modal-backdrop" id="decisionModal" role="dialog" aria-modal="true" aria-labelledby="decisionTitle"><div class="modal"><div class="modal-head"><div><h2 id="decisionTitle">Record organiser decision</h2><p>This decision and its reason will be saved to the event record.</p></div><button class="close" id="closeDecisionModal" aria-label="Close">×</button></div><form id="decisionForm"><div class="form-grid"><div class="field full"><label for="decisionAction">Decision</label><select id="decisionAction" name="action" required><option value="continue">Continue as planned</option><option value="prepare">Prepare contingency plan</option><option value="relocate">Relocate to backup venue</option><option value="postpone">Postpone</option><option value="cancel">Cancel</option></select></div><div class="field full"><label for="decisionReason">Reason for this decision</label><textarea id="decisionReason" name="reason" rows="4" maxlength="1000" required placeholder="Briefly explain the organiser's decision"></textarea></div></div><div class="notify-block" id="notifyBlock" hidden><label><input type="checkbox" id="notifyParticipants" checked /><span id="notifyLabel">Email participants</span></label><div id="notifySummary"></div><details id="notifyDetails"><summary>Preview the email</summary><pre id="notifyPreview"></pre></details></div><p class="test-mode-note" id="decisionTestNote" style="margin:14px 0 0">Confirming saves the decision and creates an in-app preview. Participants are emailed only for relocate, postpone or cancel, and only if you leave "Email participants" ticked.</p><div class="form-actions"><button class="secondary" type="button" id="cancelDecision">Cancel</button><button class="primary" type="submit" id="saveDecisionButton">Confirm decision</button></div></form></div></div>
+  <div class="modal-backdrop" id="participantsModal" role="dialog" aria-modal="true" aria-labelledby="participantsTitle"><div class="modal"><div class="modal-head"><div><h2 id="participantsTitle">Participants</h2><p>People who joined this event's email updates. They are emailed only when you confirm a relocation, postponement or cancellation.</p></div><button class="close" id="closeParticipants" aria-label="Close">×</button></div>
+    <div class="field"><label for="joinLinkInput">Join link — share it with participants</label><div class="copy-row"><input id="joinLinkInput" readonly placeholder="No join link yet" /><button class="secondary" type="button" id="copyJoinLink">Copy</button><button class="secondary" type="button" id="newJoinLink">Create link</button></div><small class="muted-note" id="joinLinkNote">Participants enter their email and tick a consent box. Creating a new link stops the old one working.</small></div>
+    <div class="section-heading" style="margin:18px 0 6px"><div><h2 id="participantsCount">Participants</h2></div><button class="secondary" type="button" id="addDemoParticipants" hidden>Add 3 demo participants</button></div>
+    <div id="participantsList" class="log" aria-live="polite"></div>
+    <div class="form-actions"><button class="primary" type="button" id="doneParticipants">Done</button></div></div></div>
+  <div class="modal-backdrop" id="notificationModal" role="dialog" aria-modal="true" aria-labelledby="notificationTitle"><div class="modal"><div class="modal-head"><div><h2 id="notificationTitle">Test notification preview</h2><p>Generated from the confirmed organiser decision.</p></div><button class="close" id="closeNotificationModal" aria-label="Close">×</button></div><p class="test-mode-note" id="notificationStatus">TEST MODE — not sent.</p><p class="info-note" id="notificationEmailResult" hidden></p><div class="notification-preview" id="notificationPreview"></div><div class="form-actions"><button class="primary" type="button" id="doneNotification">Done</button></div></div></div>
   <div class="toast" id="toast" role="status"></div>
   <script>
     // Migrate older browser-only demo events once; weather and risk assessments are fetched from the local backend on demand.
@@ -138,7 +170,7 @@
     function persist(){try{const orgId=authState?.activeOrganization?.id||"guest";localStorage.setItem(`${storeKey}:${orgId}`,JSON.stringify({logs,lightning}))}catch{}}
     function dateLabel(offset,time){const d=new Date();d.setDate(d.getDate()+offset);return `${offset===0?"Today":d.toLocaleDateString("en-SG",{weekday:"short",day:"numeric",month:"short"})} · ${time}`}
     function riskMeta(event){if(lightning)return {level:"critical",score:100,action:"Stop outdoor activity and seek shelter",reason:"Lightning safety override is active (simulated)."};const assessment=liveWeather[event.id]?.data?.assessment;if(assessment){const actions={continue_and_monitor:"Continue monitoring",prepare_rain_plan:"Prepare a rain plan",prepare_contingency:"Prepare the contingency plan",review_cancel_or_relocate:"Review relocation or cancellation",manual_review_required:"Manual review required",check_again_closer_to_event:"Planning outlook only — check again closer to the event"};return{level:assessment.window?.mode==="planning_outlook"&&assessment.status==="planning_only"?"planning":assessment.score===null?"unavailable":assessment.riskLevel,score:assessment.score,action:actions[assessment.recommendedAction]||assessment.recommendedAction,reason:assessment.reasons?.[0]||"Risk calculated from available source readings.",status:assessment.status}}const score=event.risk;return{level:score>=75?"critical":score>=55?"high":score>=30?"medium":"low",score,action:score>=75?"Review contingency / postpone":score>=55?"Prepare contingency plan":score>=30?"Prepare rain plan":"Continue and monitor",reason:event.reasons[0],status:"demo"}}
-    function renderLegacy(){const list=$("#eventList");if(!events.length){list.innerHTML='<div class="empty">No events yet. Add an event to start a demo risk review.</div>'}else{list.innerHTML=events.map(e=>{const r=riskMeta(e);const level=lightning?"critical":r.level;const live=liveWeather[e.id];const assessment=live?.data?.assessment;const riskLabel=assessment?`RISK (${assessment.status.toUpperCase()})`:`DEMO RISK`;const scoreText=Number.isFinite(r.score)?`${r.score}/100`:"No score";const breakdown=assessment?.breakdown?Object.entries(assessment.breakdown).map(([name,part])=>`${name}: ${part.input} × ${(part.weight*100).toFixed(1)}% = ${part.contribution}`).join("; "):"";return `<article class="event-card"><div class="event-title"><div class="event-symbol">${e.emoji||"▣"}</div><div><h3>${escapeHtml(e.name)}</h3><p>${escapeHtml(e.venue)} · ${escapeHtml(e.type)}</p><p style="font-size:10px">${Number(e.latitude).toFixed(3)}, ${Number(e.longitude).toFixed(3)}</p></div></div><div class="event-meta"><small>EVENT TIME</small><strong>${escapeHtml(dateLabel(e.dateOffset,e.time))}</strong></div><div class="event-meta"><small>NEA FORECAST</small><strong>${escapeHtml(live?.data?.sources?.forecast?.data?.nearestArea?.forecast||e.forecast)}</strong></div><div class="risk-detail"><small>${riskLabel} & NEXT STEP</small><div class="risk-row"><span class="risk-chip ${level}">${level==="critical"?"! ":level==="unavailable"?"— ":"● "}${level[0].toUpperCase()+level.slice(1)}</span><span class="score">${scoreText}</span></div><p style="margin-top:5px">${escapeHtml(r.action)}</p></div><div class="event-action"><button class="secondary" data-action="weather" data-id="${e.id}">${live?.loading?"Checking…":"Check live risk"}</button><button class="secondary" data-action="details" data-id="${e.id}">Why this risk?</button><button class="secondary" data-action="decision" data-id="${e.id}">${e.decision?"Record again":"Record decision"}</button></div>${live?.error?`<div class="live-result" style="grid-column:1/-1;color:#a12f2a">Live assessment unavailable: ${escapeHtml(live.error)}</div>`:live?.data?`<div class="live-result" style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:10px;font-size:12px"><b>Explainable live assessment</b> · ${assessment?.score===null?"Score unavailable — manual review required":`${assessment?.score}/100 · ${assessment?.riskLevel} · ${assessment?.status}`}<br><b>Breakdown:</b> ${escapeHtml(breakdown)}<br><b>Why:</b> ${escapeHtml((assessment?.reasons||[]).join(" "))}<br><b>Forecast area:</b> ${escapeHtml(describeSource(live.data.sources.forecast))}<br><b>Nearest rainfall station:</b> ${escapeHtml(describeSource(live.data.sources.rainfall))}<br><b>Lightning observations:</b> ${escapeHtml(describeLightning(live.data.sources.lightning))}<br><b>Formula:</b> ${escapeHtml(assessment?.formula||"")}<br><small>${escapeHtml(assessment?.safetyNote||"Historical probability is not included in this prototype score.")} The score does not automatically cancel, relocate, stop, or resume an event.</small></div>`:""}</article>`}).join("")}
+    function renderLegacy(){const list=$("#eventList");if(!events.length){list.innerHTML='<div class="empty">No events yet. Add an event to start a demo risk review.</div>'}else{list.innerHTML=events.map(e=>{const r=riskMeta(e);const level=lightning?"critical":r.level;const live=liveWeather[e.id];const assessment=live?.data?.assessment;const riskLabel=assessment?`RISK (${assessment.status.toUpperCase()})`:`DEMO RISK`;const scoreText=Number.isFinite(r.score)?`${r.score}/100`:"No score";const breakdown=assessment?.breakdown?Object.entries(assessment.breakdown).map(([name,part])=>`${name}: ${part.input} × ${(part.weight*100).toFixed(1)}% = ${part.contribution}`).join("; "):"";return `<article class="event-card"><div class="event-title"><div class="event-symbol">${e.emoji||"▣"}</div><div><h3>${escapeHtml(e.name)}</h3><p>${escapeHtml(e.venue)} · ${escapeHtml(e.type)}</p><p style="font-size:10px">${Number(e.latitude).toFixed(3)}, ${Number(e.longitude).toFixed(3)}</p></div></div><div class="event-meta"><small>EVENT TIME</small><strong>${escapeHtml(dateLabel(e.dateOffset,e.time))}</strong></div><div class="event-meta"><small>NEA FORECAST</small><strong>${escapeHtml(live?.data?.sources?.forecast?.data?.nearestArea?.forecast||e.forecast)}</strong></div><div class="risk-detail"><small>${riskLabel} & NEXT STEP</small><div class="risk-row"><span class="risk-chip ${level}">${level==="critical"?"! ":level==="unavailable"?"— ":"● "}${level[0].toUpperCase()+level.slice(1)}</span><span class="score">${scoreText}</span></div><p style="margin-top:5px">${escapeHtml(r.action)}</p></div><div class="event-action"><button class="secondary" data-action="weather" data-id="${e.id}">${live?.loading?"Checking…":"Check live risk"}</button><button class="secondary" data-action="details" data-id="${e.id}">Why this risk?</button><button class="secondary" data-action="decision" data-id="${e.id}">${e.decision?"Record again":"Record decision"}</button><button class="secondary" data-action="participants" data-id="${e.id}">${typeof participantsButtonLabel==="function"?participantsButtonLabel(e.id):"Participants"}</button></div>${live?.error?`<div class="live-result" style="grid-column:1/-1;color:#a12f2a">Live assessment unavailable: ${escapeHtml(live.error)}</div>`:live?.data?`<div class="live-result" style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:10px;font-size:12px"><b>Explainable live assessment</b> · ${assessment?.score===null?"Score unavailable — manual review required":`${assessment?.score}/100 · ${assessment?.riskLevel} · ${assessment?.status}`}<br><b>Breakdown:</b> ${escapeHtml(breakdown)}<br><b>Why:</b> ${escapeHtml((assessment?.reasons||[]).join(" "))}<br><b>Forecast area:</b> ${escapeHtml(describeSource(live.data.sources.forecast))}<br><b>Nearest rainfall station:</b> ${escapeHtml(describeSource(live.data.sources.rainfall))}<br><b>Lightning observations:</b> ${escapeHtml(describeLightning(live.data.sources.lightning))}<br><b>Formula:</b> ${escapeHtml(assessment?.formula||"")}<br><small>${escapeHtml(assessment?.safetyNote||"Historical probability is not included in this prototype score.")} The score does not automatically cancel, relocate, stop, or resume an event.</small></div>`:""}</article>`}).join("")}
       const attention=events.filter(e=>riskMeta(e).level==="critical"||riskMeta(e).level==="high").length;$("#metricEvents").textContent=events.length;$("#metricAttention").textContent=attention;$("#metricDecisions").textContent=logs.filter(l=>l.kind==="decision").length;const latest=Object.values(liveWeather).filter(x=>x.data).at(-1);$("#metricFreshness").textContent=latest?"Live checked":"Not checked";
       $("#lightningBanner").classList.toggle("active",lightning);$("#lightningTitle").textContent=lightning?"ORGANISER-CONFIRMED DEMO ALERT — stop and shelter":"Lightning override: no confirmed demo alert";$("#lightningText").textContent=lightning?"The backend safety override applies on the next live risk check; RainReady never auto-resumes an event.":"NEA observations remain visible as context, but are not treated as an official warning or all-clear.";$("#lightningToggle").textContent=lightning?"Clear confirmed demo alert":"Confirm demo alert";
       const log=$("#activityLog");log.innerHTML=logs.length?logs.slice(0,5).map(l=>`<div class="log-item"><span class="log-dot" style="background:${l.kind==="alert"?"#bb4a45":l.kind==="decision"?"#3d83a5":"#4f9870"}"></span><div><p>${escapeHtml(l.text)}</p><small>${new Date(l.time).toLocaleString("en-SG",{dateStyle:"medium",timeStyle:"short"})}</small></div></div>`).join(""):'<div class="empty" style="padding:18px">No activity yet.</div>';persist()}
@@ -177,7 +209,7 @@
           <div class="event-meta"><small>EVENT TIME</small><strong>${escapeHtml(formatEventDate(event.date,event.time))}</strong></div>
           <div class="event-meta"><small>${forecastLabel}</small><strong>${escapeHtml(shownForecast)}</strong></div>
           <div class="risk-detail"><small>${assessment?.window?.mode==="planning_outlook"?"DAILY PLANNING ESTIMATE (PROVISIONAL)":assessment?`WEATHER (${assessment.status.toUpperCase()})`:"RISK STATUS"}</small><div class="risk-row"><span class="risk-chip ${risk.level}">${escapeHtml(assessment?.window?.mode==="planning_outlook"?assessment.planningOutlook?.attentionLevel||"Planning estimate":risk.level[0].toUpperCase()+risk.level.slice(1))}</span><span class="score">${Number.isFinite(risk.score)?`${risk.score}/100`:"—"}</span></div><p style="margin-top:5px">${escapeHtml(risk.action)}</p>${assessment?.airQuality?.status&&assessment.airQuality.status!=="unavailable"?`<p class="freshness-note">PSI ${assessment.airQuality.psi} · ${escapeHtml(String(assessment.airQuality.level).replaceAll("_"," "))} (separate)</p>`:""}</div>
-          <div class="event-action"><button class="secondary" data-action="weather" data-id="${escapeHtml(event.id)}">${live?.loading?"Checking…":assessment?.window?.mode==="planning_outlook"?"Refresh outlook":"Check event-time risk"}</button>${event.backupVenue&&assessment?.window?.mode!=="planning_outlook"?`<button class="secondary" data-action="backup-weather" data-id="${escapeHtml(event.id)}">${live?.backupLoading?"Checking backup…":"Check backup venue"}</button>`:""}<button class="secondary" data-action="details" data-id="${escapeHtml(event.id)}">${live?.detailsOpen?"Hide explanation":"Why this risk?"}</button><button class="secondary" data-action="decision" data-id="${escapeHtml(event.id)}">Record decision</button><button class="secondary" data-action="edit" data-id="${escapeHtml(event.id)}">Edit</button><button class="secondary" data-action="delete" data-id="${escapeHtml(event.id)}">Delete</button></div>
+          <div class="event-action"><button class="secondary" data-action="weather" data-id="${escapeHtml(event.id)}">${live?.loading?"Checking…":assessment?.window?.mode==="planning_outlook"?"Refresh outlook":"Check event-time risk"}</button>${event.backupVenue&&assessment?.window?.mode!=="planning_outlook"?`<button class="secondary" data-action="backup-weather" data-id="${escapeHtml(event.id)}">${live?.backupLoading?"Checking backup…":"Check backup venue"}</button>`:""}<button class="secondary" data-action="details" data-id="${escapeHtml(event.id)}">${live?.detailsOpen?"Hide explanation":"Why this risk?"}</button><button class="secondary" data-action="decision" data-id="${escapeHtml(event.id)}">Record decision</button><button class="secondary" data-action="participants" data-id="${escapeHtml(event.id)}">${typeof participantsButtonLabel==="function"?participantsButtonLabel(event.id):"Participants"}</button><button class="secondary" data-action="edit" data-id="${escapeHtml(event.id)}">Edit</button><button class="secondary" data-action="delete" data-id="${escapeHtml(event.id)}">Delete</button></div>
           ${renderPlanningPanel(event,assessment)||renderAssessmentPanel(event,assessment,backup,breakdown)}${assessment?.window?.mode==="planning_outlook"?"":renderBackupComparison(event,assessment)}${history}</article>`
       }).join("")}
       const attention=events.filter(event=>{const assessment=liveWeather[event.id]?.data?.assessment;return ["critical","high"].includes(riskMeta(event).level)||["unhealthy","very_unhealthy","hazardous"].includes(assessment?.airQuality?.level)}).length;const decisionCount=events.reduce((count,event)=>count+(Array.isArray(event.decisions)?event.decisions.length:0),0);$("#metricEvents").textContent=events.length;$("#metricAttention").textContent=attention;$("#metricDecisions").textContent=decisionCount;const latest=Object.values(liveWeather).filter(item=>item.data).at(-1);$("#metricFreshness").textContent=latest?"Live checked":"Not checked";$("#lightningBanner").classList.toggle("active",lightning);$("#lightningTitle").textContent=lightning?"ORGANISER-CONFIRMED DEMO ALERT — stop and shelter":"Lightning override: no confirmed demo alert";$("#lightningText").textContent=lightning?"The backend safety override will apply on the next live risk check. This is separate from the NEA observation feed and never auto-resumes an event.":"NEA observations remain visible as context, but are not treated as an official warning or all-clear.";$("#lightningToggle").textContent=lightning?"Clear confirmed demo alert":"Confirm demo alert";const log=$("#activityLog");log.innerHTML=logs.length?logs.slice(0,5).map(item=>`<div class="log-item"><span class="log-dot" style="background:${item.kind==="alert"?"#bb4a45":item.kind==="decision"?"#3d83a5":"#4f9870"}"></span><div><p>${escapeHtml(item.text)}</p><small>${new Date(item.time).toLocaleString("en-SG",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Singapore"})}</small></div></div>`).join(""):'<div class="empty" style="padding:18px">No activity yet.</div>';persist()}
@@ -193,7 +225,7 @@
     async function checkBackupWeather(event){if(!event.backupVenue)return;liveWeather[event.id]={...(liveWeather[event.id]||{}),backupLoading:true,backupError:null};render();try{const query=new URLSearchParams({latitude:String(event.backupVenue.latitude),longitude:String(event.backupVenue.longitude),sensitivity:event.sensitivity,activityType:event.type,lightningStatus:lightning?"confirmed_alert":"none",eventDateTime:eventDateTimeParam(event)});const body=await api(`/api/assessment?${query}`);liveWeather[event.id]={...liveWeather[event.id],backupLoading:false,backup:{data:body}};render();toast(body.assessment.score===null?"No backup-site score: the event start is outside the available forecast window.":`Backup-site weather risk ${body.assessment.score}/100. Compare the matched period before deciding.`)}catch(error){liveWeather[event.id]={...liveWeather[event.id],backupLoading:false,backupError:error.message};render();toast(`Could not check backup venue: ${error.message}`)}}
     function addLog(text,kind="system"){logs.unshift({text,time:new Date().toISOString(),kind});render()}
     function decisionFor(event){decisionEventId=event.id;$("#decisionForm").reset();$("#decisionTitle").textContent=`Record decision — ${event.name}`;const relocateOption=$("#decisionAction").querySelector('option[value="relocate"]');relocateOption.disabled=!event.backupVenue;relocateOption.textContent=event.backupVenue?"Relocate to backup venue":"Relocate (add a backup venue first)";$("#decisionModal").classList.add("open");$("#decisionReason").focus()}
-    async function saveDecision(e){e.preventDefault();e.stopImmediatePropagation();const form=e.currentTarget;const values=Object.fromEntries(new FormData(form).entries());try{const result=await api(`/api/events/${encodeURIComponent(decisionEventId)}/decisions`,{method:"POST",body:JSON.stringify(values)});events=events.map(event=>event.id===decisionEventId?result.event:event);const event=result.event;const decision=result.decision;decisionEventId=null;closeDecisionModal();$("#notificationTitle").textContent=decision.testNotification.title;$("#notificationStatus").textContent=`TEST MODE · PREVIEW ONLY · NOT SENT · Intended audience: ${decision.testNotification.intendedRecipientCount} participant(s); none were contacted.`;$("#notificationPreview").textContent=decision.testNotification.message;$("#notificationModal").classList.add("open");addLog(`${event.name}: ${decision.label} recorded; test notification preview generated (not sent).`,"decision")}catch(error){toast(`Could not save decision: ${error.message}`)}}
+    async function saveDecision(e){e.preventDefault();e.stopImmediatePropagation();const form=e.currentTarget;const saveButton=$("#saveDecisionButton");if(saveButton.disabled)return;saveButton.disabled=true;const values=Object.fromEntries(new FormData(form).entries());values.notifyParticipants=typeof notifyChoice==="function"?notifyChoice():false;try{const result=await api(`/api/events/${encodeURIComponent(decisionEventId)}/decisions`,{method:"POST",body:JSON.stringify(values)});events=events.map(event=>event.id===decisionEventId?result.event:event);const event=result.event;const decision=result.decision;decisionEventId=null;closeDecisionModal();$("#notificationTitle").textContent=decision.testNotification.title;$("#notificationStatus").textContent=`TEST MODE · PREVIEW ONLY · NOT SENT · Intended audience: ${decision.testNotification.intendedRecipientCount} participant(s); none were contacted.`;$("#notificationPreview").textContent=decision.testNotification.message;if(typeof showEmailResult==="function")showEmailResult(result.notification,decision);$("#notificationModal").classList.add("open");addLog(`${event.name}: ${decision.label} recorded; test notification preview generated (not sent).`,"decision")}catch(error){toast(`Could not save decision: ${error.message}`)}finally{saveButton.disabled=false}}
     $("#lightningToggle").addEventListener("click",()=>{lightning=!lightning;liveWeather={};addLog(lightning?"Organiser confirmed the demo lightning alert. The backend will apply stop-and-shelter on the next live risk check.":"Confirmed demo alert cleared. Activities do not automatically resume; the organiser must run a new assessment.","alert");toast(lightning?"Demo alert confirmed. Run Check live risk to verify the backend override.":"Demo alert cleared. Reassess before resuming any activity.")});
     const modal=$("#eventModal");function closeModal(){modal.classList.remove("open")};$("#addEventBtn").addEventListener("click",()=>openModal());$("#closeModal").addEventListener("click",closeModal);$("#cancelModal").addEventListener("click",closeModal);modal.addEventListener("click",e=>{if(e.target===modal)closeModal()});
     const decisionModal=$("#decisionModal");function closeDecisionModal(){decisionModal.classList.remove("open")};$("#closeDecisionModal").addEventListener("click",closeDecisionModal);$("#cancelDecision").addEventListener("click",closeDecisionModal);decisionModal.addEventListener("click",e=>{if(e.target===decisionModal)closeDecisionModal()});
@@ -262,7 +294,7 @@
         <td>${Number(event.participantCount||0)}</td>
         <td><span class="pill ${escapeHtml(event.sensitivity)}">${escapeHtml(event.sensitivity[0].toUpperCase()+event.sensitivity.slice(1))}</span></td>
         <td>${latest?`<span class="pill ${escapeHtml(latest.action)}">${escapeHtml(DECISION_NAMES[latest.action]||latest.action)}</span><small>${escapeHtml(formatDateTime(latest.decidedAt))}${count>1?` · ${count} decisions`:""}</small>`:'<small style="margin:0">None yet</small>'}</td>
-        <td><div class="row-actions"><button class="secondary" type="button" data-row-action="decision" data-id="${id}">Record decision</button><button class="secondary" type="button" data-row-action="edit" data-id="${id}">Edit</button><button class="secondary" type="button" data-row-action="delete" data-id="${id}">Delete</button></div></td></tr>`}).join("");
+        <td><div class="row-actions"><button class="secondary" type="button" data-row-action="decision" data-id="${id}">Record decision</button><button class="secondary" type="button" data-row-action="participants" data-id="${id}">${typeof participantsButtonLabel==="function"?participantsButtonLabel(event.id):"Participants"}</button><button class="secondary" type="button" data-row-action="edit" data-id="${id}">Edit</button><button class="secondary" type="button" data-row-action="delete" data-id="${id}">Delete</button></div></td></tr>`}).join("");
     }
     async function deleteEventRecord(event){
       if(!confirm(`Delete “${event.name}”? This removes it and its decision history from the event store.`))return;
@@ -287,7 +319,7 @@
         <td><b>${escapeHtml(event.name)}</b><small>${escapeHtml(formatEventDate(event.date,event.time))} · ${escapeHtml(event.venue)}</small></td>
         <td><span class="pill ${escapeHtml(decision.action)}">${escapeHtml(decision.label||DECISION_NAMES[decision.action]||decision.action)}</span></td>
         <td class="reason">${escapeHtml(decision.reason)}</td>
-        <td>${decision.testNotification?.status==="not_sent"?`Test preview only<small>Not sent · ${Number(decision.testNotification.intendedRecipientCount||0)} intended</small>`:"—"}</td></tr>`).join("");
+        <td>${typeof emailSummaryFor==="function"?emailSummaryFor(decision.id):""}${decision.testNotification?.status==="not_sent"?`Test preview only<small>Not sent · ${Number(decision.testNotification.intendedRecipientCount||0)} intended</small>`:"—"}</td></tr>`).join("");
     }
     ["#decisionsSearch","#decisionsAction"].forEach(selector=>$(selector).addEventListener("input",renderDecisionsView));
     $("#decisionsCsvButton").addEventListener("click",()=>{
@@ -364,8 +396,9 @@
     function syncAdSlot(){
       const settingsAds=$("#settingsAds");if(settingsAds){$("#settingsPlan").textContent=authState?PLAN_NAMES[organizationPlan()]||organizationPlan():"—";settingsAds.textContent=authState?adStatusText():"—"}
       if(!authState||adsPausedForSafety()){adState.key=null;hideAdSlot();return}
-      const key=`${authState.activeOrganization?.id}|${activeView}|${adContext()}`;if(key===adState.key)return;
-      adState.key=key;loadAd(activeView,adContext());
+      const placement=["overview","events","decisions"].includes(activeView)?activeView:"settings"; // billing and developer pages use the settings placement
+      const key=`${authState.activeOrganization?.id}|${placement}|${adContext()}`;if(key===adState.key)return;
+      adState.key=key;loadAd(placement,adContext());
     }
     async function loadAd(placement,context){
       const request=++adState.request;
@@ -401,6 +434,210 @@
     const showAuthGateBeforeAds=showAuthGate;
     showAuthGate=function(...args){showAuthGateBeforeAds(...args);adState.key=null;hideAdSlot()};
     syncAdSlot();
+  </script>
+  <script>
+    // Participants, participant emails, Plan & billing, and developer demo tools.
+    // Reuses globals from the scripts above (authState, events, api, render, renderActiveView,
+    // showView, decisionFor, toast, addLog, escapeHtml, formatDateTime, VIEW_TITLES, adState, syncAdSlot).
+    const NOTIFY_ACTIONS_UI=["relocate","postpone","cancel"];
+    const extraState={org:null,counts:{},notifications:null,billing:null,participantsEventId:null,previewTimer:null,previewRequest:0};
+    VIEW_TITLES.billing="Plan & billing";VIEW_TITLES.developer="Developer";
+    const orgId=()=>authState?.activeOrganization?.id||null;
+    function resetForOrganization(){if(extraState.org!==orgId()){extraState.org=orgId();extraState.counts={};extraState.notifications=null;extraState.billing=null}}
+    const plural=(n,word)=>`${n} ${word}${n===1?"":"s"}`;
+
+    // ---- Participants ---------------------------------------------------------
+    function participantsButtonLabel(eventId){const n=extraState.counts[eventId]||0;return n?`Participants (${n})`:"Participants"}
+    async function refreshParticipantCounts(){
+      resetForOrganization();if(!orgId())return;
+      try{const {counts}=await api("/api/participants/counts");const changed=JSON.stringify(counts)!==JSON.stringify(extraState.counts);extraState.counts=counts;if(changed)render()}catch{}
+    }
+    const loadEventsBeforeParticipants=loadEvents;
+    loadEvents=async function(...args){const result=await loadEventsBeforeParticipants(...args);refreshParticipantCounts();return result};
+
+    const participantsModal=$("#participantsModal");
+    function closeParticipants(){participantsModal.classList.remove("open");extraState.participantsEventId=null}
+    $("#closeParticipants").addEventListener("click",closeParticipants);$("#doneParticipants").addEventListener("click",closeParticipants);
+    async function openParticipants(eventId){
+      const event=events.find(item=>item.id===eventId);if(!event)return;
+      extraState.participantsEventId=eventId;
+      $("#participantsTitle").textContent=`Participants — ${event.name}`;
+      $("#addDemoParticipants").hidden=!authState?.developer;
+      participantsModal.classList.add("open");
+      await loadParticipants();
+    }
+    async function loadParticipants(){
+      const eventId=extraState.participantsEventId;if(!eventId)return;
+      const list=$("#participantsList");list.textContent="Loading…";
+      try{
+        const data=await api(`/api/events/${encodeURIComponent(eventId)}/participants`);
+        if(extraState.participantsEventId!==eventId)return;
+        $("#joinLinkInput").value=data.joinLink?.url||"";
+        $("#newJoinLink").textContent=data.joinLink?"New link":"Create link";
+        $("#copyJoinLink").disabled=!data.joinLink;
+        const active=data.participants.filter(p=>p.subscribed).length;
+        $("#participantsCount").textContent=`${plural(active,"participant")} subscribed${data.participants.length>active?` · ${data.participants.length-active} unsubscribed`:""}`;
+        if(!data.participants.length){list.innerHTML='<div class="empty" style="padding:18px">Nobody has joined yet. Share the join link with your participants.</div>';return}
+        list.replaceChildren(...data.participants.map(person=>{
+          const row=document.createElement("div");row.className=`participant-row${person.subscribed?"":" unsubscribed"}`;
+          const detail=document.createElement("div");const email=document.createElement("b");email.textContent=person.email;const meta=document.createElement("small");
+          meta.textContent=`${person.name?`${person.name} · `:""}${person.consentSource==="demo"?"Demo participant":"Joined with consent"} ${new Date(person.consentedAt).toLocaleDateString("en-SG",{dateStyle:"medium"})}${person.subscribed?"":" · unsubscribed"}`;
+          detail.append(email,meta);row.append(detail);
+          const remove=document.createElement("button");remove.type="button";remove.className="secondary";remove.textContent="Remove";
+          remove.addEventListener("click",async()=>{if(!confirm(`Remove ${person.email}? Their record is deleted and they will get no more emails about this event.`))return;try{await api(`/api/events/${encodeURIComponent(eventId)}/participants/${encodeURIComponent(person.id)}`,{method:"DELETE"});toast("Participant removed.");await loadParticipants();refreshParticipantCounts()}catch(error){toast(error.message)}});
+          row.append(remove);return row}));
+      }catch(error){list.textContent=`Could not load participants: ${error.message}`}
+    }
+    $("#newJoinLink").addEventListener("click",async()=>{
+      const eventId=extraState.participantsEventId;if(!eventId)return;
+      if($("#joinLinkInput").value&&!confirm("Create a new join link? The current link will stop working. People who already joined stay on the list."))return;
+      try{const {joinLink}=await api(`/api/events/${encodeURIComponent(eventId)}/join-link`,{method:"POST",body:"{}"});$("#joinLinkInput").value=joinLink.url;$("#copyJoinLink").disabled=false;$("#newJoinLink").textContent="New link";toast("Join link ready. Copy it and share it with participants.")}catch(error){toast(error.message)}
+    });
+    $("#copyJoinLink").addEventListener("click",async()=>{const input=$("#joinLinkInput");if(!input.value)return;try{await navigator.clipboard.writeText(input.value);toast("Join link copied.")}catch{input.select();toast("Select the link and copy it.")}});
+    $("#addDemoParticipants").addEventListener("click",async()=>{const eventId=extraState.participantsEventId;if(!eventId)return;try{await api(`/api/dev/events/${encodeURIComponent(eventId)}/demo-participants`,{method:"POST",body:JSON.stringify({count:3})});toast("Added 3 demo participants (example.com).");await loadParticipants();refreshParticipantCounts()}catch(error){toast(error.message)}});
+    // Capture phase: the existing event-list handler stops other click handlers.
+    document.addEventListener("click",event=>{const button=event.target.closest('button[data-action="participants"],button[data-row-action="participants"]');if(!button)return;event.preventDefault();event.stopPropagation();openParticipants(button.dataset.id)},true);
+
+    // ---- Email participants on a confirmed decision ---------------------------
+    function notifyChoice(){const box=$("#notifyParticipants");return !$("#notifyBlock").hidden&&box.checked&&!box.disabled}
+    async function updateNotifyBlock(){
+      const block=$("#notifyBlock");const action=$("#decisionAction").value;const event=events.find(item=>item.id===decisionEventId);
+      const request=++extraState.previewRequest;
+      if(!event||!NOTIFY_ACTIONS_UI.includes(action)||(action==="relocate"&&!event.backupVenue)){block.hidden=true;return}
+      try{
+        const query=new URLSearchParams({action,reason:$("#decisionReason").value.trim()});
+        const preview=await api(`/api/events/${encodeURIComponent(event.id)}/notification-preview?${query}`);
+        if(request!==extraState.previewRequest)return;
+        if(!preview.notifies){block.hidden=true;return}
+        block.hidden=false;
+        const box=$("#notifyParticipants");box.disabled=!preview.recipientCount;
+        $("#notifyLabel").textContent=preview.recipientCount?`Email ${plural(preview.recipientCount,"participant")} when I confirm`:"Email participants";
+        $("#notifySummary").textContent=preview.recipientCount
+          ?(preview.mailer==="outbox"?"This server keeps emails in the developer outbox; nothing leaves the server.":"Sent through Amazon SES. Each email has an unsubscribe link.")
+          :"Nobody has joined this event's updates yet. Share the join link from Participants first.";
+        $("#notifyPreview").textContent=`Subject: ${preview.subject}\n\n${preview.body}`;
+        $("#notifyDetails").hidden=!preview.recipientCount;
+      }catch{block.hidden=true}
+    }
+    const decisionForBeforeNotify=decisionFor;
+    decisionFor=function(event){decisionForBeforeNotify(event);$("#notifyParticipants").checked=true;$("#notifyBlock").hidden=true;updateNotifyBlock()};
+    $("#decisionAction").addEventListener("change",updateNotifyBlock);
+    $("#decisionReason").addEventListener("input",()=>{clearTimeout(extraState.previewTimer);extraState.previewTimer=setTimeout(updateNotifyBlock,400)});
+    function showEmailResult(notification,decision){
+      const box=$("#notificationEmailResult");const status=notification?.status;box.hidden=false;
+      if(status==="sent"||status==="partly_failed"){
+        $("#notificationTitle").textContent=`Participants emailed — ${decision.label}`;
+        $("#notificationStatus").textContent="Decision saved. The in-app preview is below.";
+        box.textContent=status==="sent"
+          ?`Emailed ${plural(notification.sentCount,"participant")}${notification.mailer==="outbox"?" (developer outbox on this server; nothing left the server)":" through Amazon SES"}.`
+          :`Emailed ${notification.sentCount} of ${notification.recipientCount} participants; ${notification.failedCount} could not be sent. Check the server log${authState?.developer?" or the Developer outbox":""}.`;
+        addLog(`${decision.label}: emailed ${notification.sentCount} of ${notification.recipientCount} participant(s).`,"decision");
+      }else if(status==="skipped"&&notification.reason==="no_participants"){box.textContent="No participants were emailed: nobody has joined this event's updates yet."}
+      else if(status==="skipped"&&notification.reason==="already_emailed_recently"){box.textContent="Participants were already emailed about this event in the last two minutes, so they were not emailed again."}
+      else if(status==="failed"){box.textContent="The decision was saved, but the participant emails could not be sent. Check the server log."}
+      else if(NOTIFY_ACTIONS_UI.includes(decision.action)){box.textContent="Participants were not emailed."}
+      else box.hidden=true;
+      extraState.notifications=null;
+    }
+    const doneNotification=$("#doneNotification");
+    function emailSummaryFor(decisionId){const n=extraState.notifications?.[decisionId];if(!n)return"";return `<b>Emailed ${n.sentCount}/${n.recipientCount}</b><small>${n.failedCount?`${n.failedCount} failed · `:""}${n.mailer==="outbox"?"developer outbox":"Amazon SES"}</small>`}
+    async function loadNotificationsForHistory(){
+      resetForOrganization();if(extraState.notifications||!orgId())return;
+      extraState.notifications={};
+      try{const {notifications}=await api("/api/notifications");extraState.notifications=Object.fromEntries(notifications.map(n=>[n.decisionId,n]));if(activeView==="decisions")renderDecisionsView()}catch{}
+    }
+
+    // ---- Plan & billing ---------------------------------------------------------
+    function applyPlan(plan){
+      if(!authState?.activeOrganization)return;
+      authState.activeOrganization.plan=plan;
+      const entry=authState.organizations?.find(item=>item.id===authState.activeOrganization.id);if(entry)entry.plan=plan;
+      adState.key=null;adState.off=null;syncAdSlot();
+    }
+    async function loadBilling(force=false){
+      resetForOrganization();if(!orgId())return;
+      if(extraState.billing&&!force){renderBilling();return}
+      $("#billingNote").textContent="Loading…";
+      try{extraState.billing=await api("/api/billing");applyPlan(extraState.billing.plan);renderBilling()}catch(error){$("#billingNote").textContent=`Could not load billing: ${error.message}`}
+    }
+    function renderBilling(){
+      const b=extraState.billing;if(!b)return;
+      $("#billingNote").textContent=b.stripeEnabled
+        ?"Payments use Stripe in TEST MODE: pay with card 4242 4242 4242 4242, any future expiry date and any CVC. No real money is charged."
+        :`Payments are not set up on this server (no Stripe test keys).${authState?.developer?" As a developer you can switch plans on the Developer page.":""}`;
+      $("#planGrid").innerHTML=b.plans.map(plan=>{
+        const current=plan.id===b.plan;
+        let action="";
+        if(plan.id==="community"&&b.plan==="free"){
+          action=!b.canManage?'<small class="muted-note">Only the organisation owner can upgrade.</small>'
+            :b.stripeEnabled?'<button class="primary" type="button" data-billing="upgrade">Upgrade with Stripe (test)</button>'
+            :'<button class="secondary" type="button" disabled>Payments not set up</button>';
+        }
+        if(current&&plan.id!=="free"&&b.canManage)action=`<button class="secondary" type="button" data-billing="cancel">${b.subscription?.provider==="stripe"?"Cancel subscription":"Return to Free"}</button>`;
+        return `<section class="plan-card${current?" current":""}">${current?'<span class="plan-badge">Current plan</span>':""}<h2>${escapeHtml(plan.name)}</h2><div class="plan-price">${escapeHtml(plan.price)}</div><ul>${plan.features.map(f=>`<li>${escapeHtml(f)}</li>`).join("")}</ul>${action}</section>`;
+      }).join("");
+      const sub=b.subscription;
+      $("#billingFoot").textContent=sub?`Last change: ${sub.provider==="developer"?"developer demo switch (no payment)":`Stripe subscription, status ${sub.status}`} on ${formatDateTime(sub.updatedAt)}.`:"No subscription yet.";
+    }
+    $("#planGrid").addEventListener("click",async event=>{
+      const button=event.target.closest("button[data-billing]");if(!button)return;button.disabled=true;
+      try{
+        if(button.dataset.billing==="upgrade"){const {url}=await api("/api/billing/checkout",{method:"POST",body:JSON.stringify({plan:"community"})});location.assign(url);return}
+        if(button.dataset.billing==="cancel"){if(!confirm("Return to the Free plan? Sponsored messages will show again."))return;extraState.billing=await api("/api/billing/cancel",{method:"POST",body:"{}"});applyPlan(extraState.billing.plan);renderBilling();toast("Your organisation is back on the Free plan.")}
+      }catch(error){toast(error.message)}finally{button.disabled=false}
+    });
+    async function handleCheckoutReturn(){
+      const params=new URLSearchParams(location.search);const result=params.get("checkout");if(!result)return;
+      try{history.replaceState(null,"",`${location.pathname}#billing`)}catch{}
+      if(result==="cancelled"){toast("Payment cancelled. Your plan has not changed.");showView("billing");return}
+      const sessionId=params.get("session_id");if(result!=="success"||!sessionId)return;
+      try{extraState.billing=await api("/api/billing/confirm",{method:"POST",body:JSON.stringify({sessionId})});applyPlan(extraState.billing.plan);toast("Payment confirmed. Your organisation is now on the Community plan: no more sponsored messages.")}
+      catch(error){toast(`Payment not confirmed yet: ${error.message}`)}
+      showView("billing");
+    }
+
+    // ---- Developer demo tools ---------------------------------------------------
+    async function renderDeveloper(){
+      if(!authState?.developer){showView("overview");return}
+      $("#devEventSelect").innerHTML=events.map(event=>`<option value="${escapeHtml(event.id)}">${escapeHtml(event.name)} · ${escapeHtml(event.date)}</option>`).join("")||'<option value="">No events yet</option>';
+      try{
+        const status=await api("/api/dev/status");
+        $("#devStatus").textContent=`Developer account. Plan: ${status.plan}. Emails: ${status.mailer==="outbox"?"outbox only (nothing leaves the server)":"Amazon SES (real emails)"}. Stripe: ${status.stripeEnabled?`test mode${status.webhookConfigured?" with webhook":" without webhook (confirmed on return)"}`:"not configured"}. Links use ${status.publicUrl}.`;
+        document.querySelectorAll("[data-dev-plan]").forEach(button=>{button.classList.toggle("primary",button.dataset.devPlan===status.plan);button.classList.toggle("secondary",button.dataset.devPlan!==status.plan)});
+      }catch(error){$("#devStatus").textContent=`Developer tools unavailable: ${error.message}`}
+      loadOutbox();
+    }
+    async function loadOutbox(){
+      const box=$("#devOutbox");box.textContent="Loading…";
+      try{
+        const {emails}=await api("/api/dev/outbox");
+        if(!emails.length){box.innerHTML='<div class="empty" style="padding:18px">No participant emails yet. Add demo participants, then confirm a relocate, postpone or cancel decision with "Email participants" ticked.</div>';return}
+        box.replaceChildren(...emails.map(email=>{
+          const item=document.createElement("article");item.className="outbox-item";
+          const head=document.createElement("header");const to=document.createElement("b");to.textContent=`To: ${email.email}`;const meta=document.createElement("span");meta.textContent=`${email.status}${email.error?` (${email.error})`:""} · ${email.mailer} · ${formatDateTime(email.sentAt||email.createdAt)}`;head.append(to,meta);
+          const subject=document.createElement("div");subject.style.margin="6px 0 0";subject.style.fontWeight="650";subject.textContent=email.subject;
+          const body=document.createElement("pre");body.textContent=email.body;
+          item.append(head,subject,body);return item}));
+      }catch(error){box.textContent=`Could not load the outbox: ${error.message}`}
+    }
+    $("#devPlanButtons").addEventListener("click",async event=>{const button=event.target.closest("[data-dev-plan]");if(!button)return;try{const {plan}=await api("/api/dev/plan",{method:"POST",body:JSON.stringify({plan:button.dataset.devPlan})});applyPlan(plan);extraState.billing=null;toast(`Demo: organisation switched to ${plan}.`);renderDeveloper()}catch(error){toast(error.message)}});
+    $("#devAddParticipants").addEventListener("click",async()=>{const eventId=$("#devEventSelect").value;if(!eventId)return;try{await api(`/api/dev/events/${encodeURIComponent(eventId)}/demo-participants`,{method:"POST",body:JSON.stringify({count:3})});toast("Added 3 demo participants (example.com).");refreshParticipantCounts()}catch(error){toast(error.message)}});
+    $("#devRefreshOutbox").addEventListener("click",loadOutbox);
+
+    // ---- Hooks into navigation and sign-in -------------------------------------
+    const renderActiveViewBeforeBilling=renderActiveView;
+    renderActiveView=function(){
+      renderActiveViewBeforeBilling();resetForOrganization();
+      if(activeView==="decisions")loadNotificationsForHistory();
+      else if(activeView==="billing"&&!extraState.billingLoading){extraState.billingLoading=true;loadBilling().finally(()=>{extraState.billingLoading=false})}
+      else if(activeView==="developer"&&!extraState.developerRendered){extraState.developerRendered=true;renderDeveloper().finally(()=>{setTimeout(()=>{extraState.developerRendered=false},0)})}
+    };
+    const renderSettingsBeforeBilling=renderSettingsStatic;
+    renderSettingsStatic=function(){renderSettingsBeforeBilling();$("#settingsUserId").textContent=authState?.user?.id||"—"};
+    const activateSessionBeforeBilling=activateSession;
+    activateSession=function(data){activateSessionBeforeBilling(data);if(authState)authState.developer=Boolean(data?.developer);$("#navDeveloper").hidden=!authState?.developer;handleCheckoutReturn()};
+    const showAuthGateBeforeBilling=showAuthGate;
+    showAuthGate=function(...args){showAuthGateBeforeBilling(...args);$("#navDeveloper").hidden=true;extraState.org=null};
   </script>
 </body>
 </html>
