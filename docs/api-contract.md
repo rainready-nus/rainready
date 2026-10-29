@@ -10,6 +10,8 @@ Returns service status and prototype version.
 {
   "status": "ok",
   "version": "0.5.0",
+  "storage": "sqlite",
+  "ads": "house",
   "checkedAt": "2026-10-06T10:00:00+08:00"
 }
 ```
@@ -97,6 +99,16 @@ The default SQLite database is `backend/data/rainready.sqlite`; `RAINREADY_DB_FI
 `POST /api/events/{eventId}/decisions` requires an `action` (`continue`, `prepare`, `relocate`, `postpone`, or `cancel`) and a non-empty `reason` of at most 1000 characters. A relocation decision is rejected unless the event has a backup venue. It saves the organiser decision, ISO timestamp, and a test-notification preview in the event's decision history, then returns HTTP 201 with `{ "decision", "event" }`. `GET /api/events/{eventId}/decisions` returns the saved `{ "decisions": [...] }`; event retrieval also includes its decision history.
 
 Every preview is labelled `mode: "test"` and `status: "not_sent"`, with an intended participant count but no participant addresses. There is no email, SMS, push provider, or network-delivery code in this prototype. The interface states that the preview was not sent. A future live-notification feature must be designed and explicitly enabled separately.
+
+## Sponsored messages (ads)
+
+Whether ads appear depends on the selected organisation's plan (`free`, `community`, `enterprise`), which the server reads from the database on every request; the client cannot override it. `GET /api/auth/me`, login and registration return `plan` on each organisation for display only. No route changes a plan (operators use `npm run plan`).
+
+- `GET /api/ads?placement={overview|events|decisions|settings}&context={general|wet}&exclude={adId?}` requires the session cookie and `X-RainReady-Organization` (missing 400, not a member 403). On the Free plan it returns `{ "enabled": true, "plan": "free", "ad": { "id", "sponsor", "headline", "body", "cta", "clickUrl", "destinationHost" } }`, or `"ad": null` when no ad fits the placement. On a paid plan it returns `{ "enabled": false, "reason": "subscribed", "plan", "ad": null }`; with `RAINREADY_ADS=off`, `"reason": "turned_off"`. `context=wet` prefers ads written for wet-weather planning; `exclude` avoids repeating the previous ad. The destination URL is not sent; the browser links to `clickUrl`. Invalid placement or context returns HTTP 400; no session returns 401.
+- `POST /api/ads/{adId}/impression` with `{ "placement" }` requires the session cookie and `X-RainReady-Organization`, adds one impression to that ad's counter for the day (Free plan only; a paid organisation's impressions are ignored) and returns HTTP 204. Same-origin check as other state changes; unknown ad or placement returns 404.
+- `GET /api/ads/{adId}/click?placement={placement}` needs only the session cookie (a link cannot send the organisation header), adds one click and answers HTTP 302 to the sponsor URL from the server's catalogue (so it cannot be used as an open redirect), with `Referrer-Policy: no-referrer`. A signed-out click is redirected but not counted. Unknown ad or placement returns 404.
+
+Counting is limited to 300 ad events per user per 15 minutes. A counter that cannot be written is logged on the server and never blocks the page or the click-through. Stored rows are `ad_daily_stats (ad_id, placement, day, impressions, clicks)` only, with no user or organisation identifier.
 
 ## Local configuration and secret handling
 

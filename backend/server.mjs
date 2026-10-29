@@ -8,6 +8,7 @@ import { createEventStore } from "./event-store.mjs";
 import { createEventService, EventValidationError } from "./event-service.mjs";
 import { searchOneMap, GeocodingConfigurationError, GeocodingUpstreamError } from "./geocoding.mjs";
 import { AuthError, createAuthService, clearedSessionCookie, hashToken, readSessionCookie, sessionCookie } from "./auth.mjs";
+import { AD_CONTEXTS, AD_PLACEMENTS, createConfiguredAdService, isAdFreePlan, publicAd, singaporeDay } from "./ads.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendPath = path.join(root, "frontend", "index.html");
@@ -31,6 +32,8 @@ export async function createConfiguredStore(environment = process.env) {
   });
 }
 const eventStore = await createConfiguredStore();
+// RAINREADY_ADS=house (default) or off. A broken ad catalogue stops start-up with a clear message.
+const configuredAds = createConfiguredAdService();
 
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
@@ -83,7 +86,7 @@ async function readJsonBody(request) {
   }
 }
 
-export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchOneMap, cache = new Map(), store = eventStore } = {}) {
+export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchOneMap, cache = new Map(), store = eventStore, ads = configuredAds } = {}) {
   assertLocalPrototypeSafeEnvironment();
   const auth = createAuthService(store.auth);
   const allowedOrigins = (process.env.RAINREADY_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
@@ -115,6 +118,7 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
         status: "ok",
         version: "0.5.0",
         storage: store.driver || "sqlite",
+        ads: ads.mode,
         checkedAt: new Date().toISOString(),
       });
     }
@@ -217,6 +221,72 @@ export function createServer({ snapshot = getWeatherSnapshot, geocoder = searchO
         if (error instanceof AuthError) return sendJson(response, error.status, { error: error.code, message: error.message });
         return sendJson(response, 500, { error: "member_remove_error", message: "RainReady could not remove this member." });
       }
+    }
+
+    // ---- Sponsored messages ---------------------------------------------------
+    // Whether ads show depends on the selected organisation's plan, checked here on the server:
+    // Free organisations always get ads, paid plans never do. The click link cannot send the
+    // organisation header, so clicks need only a session. Counters never store who saw or clicked.
+    if (url.pathname === "/api/ads" || url.pathname.startsWith("/api/ads/")) {
+      const adSession = await currentSession(request);
+      const adOrganization = async () => {
+        const context = await organizationContext(request, adSession);
+        return context.error ? { error: context.error } : { organization: context.organization };
+      };
+      const adRoute = url.pathname.match(/^\/api\/ads\/([a-z0-9-]{2,48})\/(impression|click)$/);
+      const placement = url.searchParams.get("placement") ?? "";
+      const countAdEvent = async (ad, kind, where) => {
+        if (!adSession || !store.ads) return;
+        try {
+          const limit = await store.auth.consumeRateLimit({
+            keyHash: hashToken(`ads:${adSession.user.id}`), now: Date.now(), windowMs: 15 * 60 * 1000, maxAttempts: 300,
+          });
+          if (limit.allowed) await store.ads.record({ adId: ad.id, placement: where, day: singaporeDay(), kind });
+        } catch (error) {
+          console.error("RainReady could not record an ad event:", error.message); // never block the page for an ad counter
+        }
+      };
+
+      if (url.pathname === "/api/ads" && request.method === "GET") {
+        if (!adSession) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
+        const membership = await adOrganization();
+        if (membership.error) return sendJson(response, membership.error.status, { error: membership.error.code, message: membership.error.message });
+        const plan = membership.organization.plan ?? "free";
+        const context = url.searchParams.get("context") ?? "general";
+        if (!AD_PLACEMENTS.includes(placement) || !AD_CONTEXTS.includes(context)) {
+          return sendJson(response, 400, { error: "invalid_ad_request", message: `placement must be ${AD_PLACEMENTS.join(", ")} and context must be ${AD_CONTEXTS.join(" or ")}` });
+        }
+        if (isAdFreePlan(plan)) return sendJson(response, 200, { enabled: false, reason: "subscribed", plan, ad: null });
+        if (!ads.enabled) return sendJson(response, 200, { enabled: false, reason: "turned_off", plan, ad: null });
+        const ad = ads.choose({ placement, context, excludeId: url.searchParams.get("exclude") });
+        return sendJson(response, 200, { enabled: true, plan, ad: ad ? publicAd(ad, placement) : null });
+      }
+
+      if (adRoute && adRoute[2] === "impression" && request.method === "POST") {
+        if (!adSession) return sendJson(response, 401, { error: "authentication_required", message: "Sign in to continue." });
+        if (!sameOriginMutation(request)) return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
+        const membership = await adOrganization();
+        if (membership.error) return sendJson(response, membership.error.status, { error: membership.error.code, message: membership.error.message });
+        const ad = ads.find(adRoute[1]);
+        let where;
+        try { where = (await readJsonBody(request))?.placement; } catch { where = null; }
+        if (!ad || !AD_PLACEMENTS.includes(where)) return sendJson(response, 404, { error: "ad_not_found" });
+        // A paid organisation is never shown ads, so nothing it sends is counted.
+        if (!isAdFreePlan(membership.organization.plan ?? "free")) await countAdEvent(ad, "impression", where);
+        response.writeHead(204, { "cache-control": "no-store" });
+        return response.end();
+      }
+
+      if (adRoute && adRoute[2] === "click" && request.method === "GET") {
+        // Only destinations from the server's own catalogue are possible, so this is not an open redirect.
+        const ad = ads.find(adRoute[1]);
+        if (!ad || !AD_PLACEMENTS.includes(placement)) return sendJson(response, 404, { error: "ad_not_found" });
+        await countAdEvent(ad, "click", placement);
+        response.writeHead(302, { location: ad.url, "cache-control": "no-store", "referrer-policy": "no-referrer" });
+        return response.end();
+      }
+
+      return sendJson(response, 404, { error: "not_found" });
     }
 
     let session = null;

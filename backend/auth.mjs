@@ -53,7 +53,7 @@ function verifyPassword(password, encoded) {
 // Every store call is awaited, so the same service works with the synchronous SQLite store
 // (event-store.mjs) and the asynchronous PostgreSQL store (event-store-pg.mjs).
 async function publicMemberships(authStore, userId) {
-  return (await authStore.listMemberships(userId)).map(({ id, name, role }) => ({ id, name, role }));
+  return (await authStore.listMemberships(userId)).map(({ id, name, role, plan }) => ({ id, name, role, plan: plan ?? "free" }));
 }
 
 export function createAuthService(authStore) {

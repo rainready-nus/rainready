@@ -10,7 +10,9 @@
     "start": "node --env-file-if-exists=.env backend/server.mjs",
     "test": "node --test backend/*.test.mjs",
     "test:pg": "node --env-file-if-exists=.env --test backend/event-store-pg.test.mjs",
-    "db:export": "node database/postgres/scripts/export-sqlite.mjs"
+    "db:export": "node database/postgres/scripts/export-sqlite.mjs",
+    "ads:report": "node --env-file-if-exists=.env backend/ads-report.mjs",
+    "plan": "node --env-file-if-exists=.env backend/plan.mjs"
   },
   "dependencies": {
     "pg": "^8.23.1"

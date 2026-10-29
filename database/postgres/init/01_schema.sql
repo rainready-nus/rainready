@@ -23,7 +23,8 @@ CREATE EXTENSION IF NOT EXISTS citext;
 CREATE TABLE organizations (
     id          text PRIMARY KEY,
     name        text NOT NULL,
-    created_at  timestamptz NOT NULL
+    created_at  timestamptz NOT NULL,
+    plan        text NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'community', 'enterprise'))  -- free shows sponsored messages
 );
 INSERT INTO organizations (id, name, created_at)
 VALUES ('legacy', 'Imported legacy events', '1970-01-01T00:00:00Z');
@@ -361,3 +362,18 @@ BEGIN
     GET DIAGNOSTICS moved = ROW_COUNT;
     RETURN moved;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- Sponsored messages (Free plan ads). Not organisation data, so no row-level
+-- security: the rows hold counts only and never identify who saw an ad.
+-- ---------------------------------------------------------------------------
+CREATE TABLE ad_daily_stats (
+    ad_id        text    NOT NULL CHECK (ad_id ~ '^[a-z0-9][a-z0-9-]{1,47}$'),
+    placement    text    NOT NULL CHECK (placement IN ('overview', 'events', 'decisions', 'settings')),
+    day          date    NOT NULL,             -- Singapore calendar day
+    impressions  integer NOT NULL DEFAULT 0 CHECK (impressions >= 0),
+    clicks       integer NOT NULL DEFAULT 0 CHECK (clicks >= 0),
+    PRIMARY KEY (ad_id, placement, day)
+);
+COMMENT ON TABLE ad_daily_stats IS
+    'Sponsored-message counters per ad, placement and day. Aggregated only: no user, organisation or event identifiers.';

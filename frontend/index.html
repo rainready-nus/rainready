@@ -27,7 +27,10 @@
     .pill{display:inline-block;border-radius:20px;padding:3px 8px;font-size:11px;font-weight:700;background:#eef0ef;color:#4e6056;white-space:nowrap}.pill.low,.pill.continue{background:#e7f4eb;color:#267249}.pill.medium,.pill.prepare{background:var(--amber-bg);color:#98600a}.pill.high,.pill.postpone{background:#fff0e8;color:#b45623}.pill.relocate{background:var(--blue-bg);color:var(--blue)}.pill.cancel{background:var(--red-bg);color:#ad3934}
     .chip-row{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.chip-row .pill{font-size:12px;padding:5px 10px}
     .settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.kv{display:grid;grid-template-columns:150px minmax(0,1fr);gap:9px 12px;font-size:13px;margin:0}.kv dt{color:var(--muted)}.kv dd{margin:0;overflow-wrap:anywhere}.member-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}.member-row:last-child{border-bottom:0}.member-row small{display:block;color:var(--muted);font-size:11px}.settings-actions{display:flex;gap:8px;flex-wrap:wrap}.muted-note{color:var(--muted);font-size:12px;margin:10px 0 0}
-    @media(max-width:760px){.nav button:not(.active){display:flex}.settings-grid{grid-template-columns:1fr}.kv{grid-template-columns:1fr;gap:2px 0}.kv dd{margin-bottom:8px}.toolbar .count{margin-left:0}}
+    @media(max-width:760px){.app>aside,.app>main{min-width:0}.nav button:not(.active){display:flex}.settings-grid{grid-template-columns:1fr}.kv{grid-template-columns:1fr;gap:2px 0}.kv dd{margin-bottom:8px}.toolbar .count{margin-left:0}}
+    .ad-slot{margin:28px 0 0;border:1px solid var(--line);border-radius:14px;background:#fbfcfa;padding:11px 16px 14px}.ad-slot[hidden]{display:none}.ad-label{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:#87938c;font-weight:700}.ad-hide{border:0;background:none;padding:2px 0;color:#6d7b74;font-size:11px;font-weight:500;letter-spacing:0;text-transform:none;text-decoration:underline}.ad-body{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 18px;align-items:center;color:inherit;text-decoration:none;border-radius:8px}.ad-sponsor{font-size:11px;color:var(--muted)}.ad-headline{font-size:14px;font-weight:650}.ad-text{font-size:12px;color:#53645b}.ad-cta{grid-column:2;grid-row:1/4;border:1px solid var(--line);border-radius:9px;padding:8px 12px;background:#fff;color:var(--green);font-size:12px;font-weight:650;white-space:nowrap}.ad-cta small{display:block;color:var(--muted);font-size:10px;font-weight:400}.ad-body:hover .ad-cta{border-color:var(--green)}.ad-body:focus-visible{outline:2px solid var(--green);outline-offset:4px}
+    @media(max-width:600px){.ad-body{grid-template-columns:1fr}.ad-cta{grid-column:1;grid-row:auto;justify-self:start;margin-top:7px}}
+    @media print{.ad-slot{display:none!important}}
   </style>
 </head>
 <body>
@@ -83,12 +86,13 @@
         <div id="view-settings" data-view-panel="settings" hidden>
           <div class="welcome"><div><h1>Settings</h1><p>Your workspace, its members and your sign-in sessions.</p></div></div>
           <div class="settings-grid">
-            <section class="panel"><div class="panel-head"><div><h2>Workspace</h2><p>The organisation you are working in now.</p></div></div><dl class="kv"><dt>Organisation</dt><dd id="settingsOrgName">—</dd><dt>Your role</dt><dd id="settingsRole">—</dd><dt>Signed in as</dt><dd id="settingsEmail">—</dd><dt>Organisation ID</dt><dd id="settingsOrgId">—</dd><dt>Database</dt><dd id="settingsStorage">Checking…</dd><dt>App version</dt><dd id="settingsVersion">—</dd></dl></section>
+            <section class="panel"><div class="panel-head"><div><h2>Workspace</h2><p>The organisation you are working in now.</p></div></div><dl class="kv"><dt>Organisation</dt><dd id="settingsOrgName">—</dd><dt>Your role</dt><dd id="settingsRole">—</dd><dt>Plan</dt><dd id="settingsPlan">—</dd><dt>Sponsored messages</dt><dd id="settingsAds">—</dd><dt>Signed in as</dt><dd id="settingsEmail">—</dd><dt>Organisation ID</dt><dd id="settingsOrgId">—</dd><dt>Database</dt><dd id="settingsStorage">Checking…</dd><dt>App version</dt><dd id="settingsVersion">—</dd></dl></section>
             <section class="panel"><div class="panel-head"><div><h2>Members</h2><p>People who can see and change this organisation's events.</p></div><button class="secondary" type="button" id="settingsInviteButton" hidden>Invite member</button></div><div id="settingsMembers" aria-live="polite"></div><p class="muted-note" id="settingsMembersNote"></p></section>
             <section class="panel"><div class="panel-head"><div><h2>Sessions</h2><p>Sessions last 12 hours. Signing out everywhere ends every session for your account.</p></div></div><div class="settings-actions"><button class="secondary" type="button" id="settingsSignOut">Sign out</button><button class="secondary" type="button" id="settingsSignOutAll">Sign out all devices</button></div></section>
             <section class="panel"><div class="panel-head"><div><h2>This browser</h2><p>Kept only in this browser, not in the database.</p></div></div><dl class="kv"><dt>Activity log</dt><dd id="settingsLogCount">—</dd><dt>Demo lightning alert</dt><dd id="settingsLightning">—</dd></dl><div class="settings-actions" style="margin-top:14px"><button class="secondary" type="button" id="settingsClearLog">Clear activity log</button></div></section>
           </div>
         </div>
+        <section class="ad-slot" id="adSlot" aria-label="Sponsored message" hidden><div class="ad-label"><span>Sponsored</span><button type="button" class="ad-hide" id="adUpgrade">Remove ads</button></div><a class="ad-body" id="adLink" href="#" target="_blank" rel="sponsored noopener noreferrer"><span class="ad-sponsor" id="adSponsor"></span><span class="ad-headline" id="adHeadline"></span><span class="ad-text" id="adText"></span><span class="ad-cta"><span id="adCta"></span> ↗<small id="adHost"></small></span></a></section>
         <div class="footer-note">RainReady is a course-project prototype. Sample scores are illustrative and must not be used for real event safety decisions.</div>
       </div>
     </main>
@@ -336,6 +340,67 @@
     $("#organizationSelect").addEventListener("change",()=>{settingsLoadedFor=null});
 
     showView((location.hash||"").slice(1)||"overview",{updateHash:false});
+  </script>
+  <script>
+    // Sponsored messages (Free plan ads). Rules that keep ads out of the way:
+    // - one text-only slot at the bottom of each page, below all content; never in dialogs, forms,
+    //   the sign-in screen or between events, and nothing pops up, moves or plays sound;
+    // - paused while a lightning alert is confirmed or any upcoming event is at critical risk;
+    // - only a paid plan (Community or Enterprise) removes ads. The server decides from the
+    //   organisation's plan; there is no user setting to hide them;
+    // - no third-party scripts or cookies; impressions count only when half the slot has been
+    //   visible for one second, once per ad and page per visit.
+    // Reuses globals from the scripts above (authState, events, lightning, riskMeta, todaySgt,
+    // activeView, renderActiveView, renderSettingsStatic, toast).
+    const PLAN_NAMES={free:"Free",community:"Community",enterprise:"Enterprise"};
+    const adState={key:null,ad:null,lastId:null,off:null,request:0,seen:new Set(),timer:null,observer:null};
+    const organizationPlan=()=>authState?.activeOrganization?.plan||"free";
+    const adHeaders=(extra={})=>({...extra,...(authState?.activeOrganization?.id?{"x-rainready-organization":authState.activeOrganization.id}:{})});
+    function upcomingEvents(){const today=todaySgt();return events.filter(event=>!event.date||event.date>=today)}
+    function adsPausedForSafety(){return lightning||upcomingEvents().some(event=>riskMeta(event).level==="critical")}
+    function adContext(){return upcomingEvents().some(event=>["medium","high"].includes(riskMeta(event).level))?"wet":"general"}
+    function adStatusText(){if(organizationPlan()!=="free"||adState.off==="subscribed")return"None: included in your paid plan";if(adState.off==="turned_off")return"Turned off on this server";if(adsPausedForSafety())return"Paused during a lightning alert or critical risk";return"Shown at the bottom of each page (Free plan)"}
+    function hideAdSlot(){const slot=$("#adSlot");slot.hidden=true;adState.ad=null;clearTimeout(adState.timer);adState.observer?.disconnect()}
+    function syncAdSlot(){
+      const settingsAds=$("#settingsAds");if(settingsAds){$("#settingsPlan").textContent=authState?PLAN_NAMES[organizationPlan()]||organizationPlan():"—";settingsAds.textContent=authState?adStatusText():"—"}
+      if(!authState||adsPausedForSafety()){adState.key=null;hideAdSlot();return}
+      const key=`${authState.activeOrganization?.id}|${activeView}|${adContext()}`;if(key===adState.key)return;
+      adState.key=key;loadAd(activeView,adContext());
+    }
+    async function loadAd(placement,context){
+      const request=++adState.request;
+      const query=new URLSearchParams({placement,context});if(adState.lastId)query.set("exclude",adState.lastId);
+      let body=null;
+      try{const response=await fetch(`/api/ads?${query}`,{credentials:"same-origin",cache:"no-store",headers:adHeaders()});if(response.ok)body=await response.json()}catch{body=null}
+      if(request!==adState.request)return; // the page changed while loading
+      adState.off=body&&body.enabled===false?body.reason:null;
+      if(adState.off){hideAdSlot();const settingsAds=$("#settingsAds");if(settingsAds)settingsAds.textContent=adStatusText();return}
+      if(!body?.ad){hideAdSlot();return}
+      showAd(body.ad,placement);
+    }
+    function showAd(ad,placement){
+      adState.ad={...ad,placement};adState.lastId=ad.id;
+      $("#adSponsor").textContent=ad.sponsor;$("#adHeadline").textContent=ad.headline;$("#adText").textContent=ad.body;$("#adCta").textContent=ad.cta;$("#adHost").textContent=ad.destinationHost;
+      const link=$("#adLink");link.href=ad.clickUrl;link.setAttribute("aria-label",`Sponsored: ${ad.headline}, from ${ad.sponsor}. Opens ${ad.destinationHost} in a new tab.`);
+      $("#adSlot").hidden=false;watchImpression();
+    }
+    function watchImpression(){
+      clearTimeout(adState.timer);adState.observer?.disconnect();
+      const ad=adState.ad;if(!ad)return;const seenKey=`${ad.id}|${ad.placement}`;if(adState.seen.has(seenKey))return;
+      if(!("IntersectionObserver" in window))return;
+      adState.observer=new IntersectionObserver(entries=>{
+        const visible=entries.some(entry=>entry.isIntersecting&&entry.intersectionRatio>=.5);
+        clearTimeout(adState.timer);
+        if(visible)adState.timer=setTimeout(()=>{if(adState.ad!==ad||document.hidden)return;adState.seen.add(seenKey);adState.observer?.disconnect();fetch(`/api/ads/${encodeURIComponent(ad.id)}/impression`,{method:"POST",credentials:"same-origin",keepalive:true,headers:adHeaders({"content-type":"application/json"}),body:JSON.stringify({placement:ad.placement})}).catch(()=>{})},1000);
+      },{threshold:[0,.5]});
+      adState.observer.observe($("#adSlot"));
+    }
+    $("#adUpgrade").addEventListener("click",()=>toast("Sponsored messages are removed on the Community and Enterprise plans. Your organisation owner can ask RainReady to upgrade."));
+    const renderActiveViewBeforeAds=renderActiveView;
+    renderActiveView=function(){renderActiveViewBeforeAds();try{syncAdSlot()}catch(error){console.warn("Sponsored message slot skipped:",error)}};
+    const showAuthGateBeforeAds=showAuthGate;
+    showAuthGate=function(...args){showAuthGateBeforeAds(...args);adState.key=null;hideAdSlot()};
+    syncAdSlot();
   </script>
 </body>
 </html>
