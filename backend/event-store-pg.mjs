@@ -12,6 +12,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { createPgNotificationStore } from "./notification-store-pg.mjs";
+import { PlanLimitError } from "./plans.mjs";
 import { readFileSync } from "node:fs";
 import pg from "pg";
 
@@ -320,10 +321,16 @@ export function createPgEventStore(config) {
       });
     },
     get,
-    async create(organizationId, fields) {
+    /** maxEvents (the plan's limit) is checked under a per-organisation lock, in the insert's transaction. */
+    async create(organizationId, fields, { maxEvents = null } = {}) {
       const now = new Date().toISOString();
       const id = randomUUID();
       return forOrganization(organizationId, async (client) => {
+        if (maxEvents !== null) {
+          await client.query("SELECT pg_advisory_xact_lock(hashtext('rainready-events:' || $1))", [organizationId]);
+          const count = (await client.query("SELECT count(*)::int AS n FROM events WHERE organization_id = $1", [organizationId])).rows[0].n;
+          if (count >= maxEvents) throw new PlanLimitError({ limit: maxEvents, count });
+        }
         await client.query(`INSERT INTO events (id, organization_id, name, venue, venue_address, latitude, longitude,
             backup_venue_name, backup_venue_address, backup_venue_latitude, backup_venue_longitude,
             participant_count, event_date, event_time, event_type, sensitivity, created_at, updated_at)
@@ -331,6 +338,10 @@ export function createPgEventStore(config) {
           [id, organizationId, ...eventValues(fields), now, now]);
         return getWith(client, organizationId, id);
       });
+    },
+    async count(organizationId) {
+      return forOrganization(organizationId, async (client) =>
+        (await client.query("SELECT count(*)::int AS n FROM events WHERE organization_id = $1", [organizationId])).rows[0].n);
     },
     async update(organizationId, id, fields) {
       return forOrganization(organizationId, async (client) => {

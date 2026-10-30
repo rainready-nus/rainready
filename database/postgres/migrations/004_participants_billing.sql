@@ -4,8 +4,14 @@
 -- New databases already get this from init/. Run once on a database created earlier, after 003.
 --   Local Docker:  docker compose exec db psql -U rainready_admin -d rainready -f /migrations/004_participants_billing.sql
 --   RDS:           psql -f migrations/004_participants_billing.sql
--- Not safe to run twice (CREATE TABLE): it stops at the first statement if already applied.
+-- Safe to run more than once: if the tables already exist (for example on a database created
+-- from the current init/ files), it says so and changes nothing.
 \set ON_ERROR_STOP on
+SELECT to_regclass('public.event_join_links') IS NOT NULL AS already_applied \gset
+\if :already_applied
+\echo 'Migration 004 is already applied (participants, notifications and billing tables exist). Nothing to do.'
+\q
+\endif
 BEGIN;
 
 -- ---------------------------------------------------------------------------

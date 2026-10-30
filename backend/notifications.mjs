@@ -134,7 +134,7 @@ export const renderBody = (body, publicUrl, token) => body.split(UNSUBSCRIBE_PLA
  * Creates the notification for a confirmed decision and sends it, a few emails at a time.
  * Returns { notification, duplicate } or { skipped: reason }.
  */
-export async function notifyParticipants({ store, mailer, organizationId, organizationName, event, decision, userId = null, concurrency = 4 }) {
+export async function notifyParticipants({ store, mailer, organizationId, organizationName, event, decision, userId = null, concurrency = 4, publicUrl = mailer.publicUrl }) {
   if (!NOTIFY_ACTIONS.includes(decision.action)) return { skipped: "action_not_notified" };
   const recipients = await store.participants.recipients(organizationId, event.id);
   if (!recipients.length) return { skipped: "no_participants" };
@@ -150,10 +150,10 @@ export async function notifyParticipants({ store, mailer, organizationId, organi
   const worker = async () => {
     while (queue.length) {
       const delivery = queue.shift();
-      const link = `${mailer.publicUrl}/unsubscribe/${encodeURIComponent(delivery.unsubscribeToken)}`;
+      const link = `${publicUrl}/unsubscribe/${encodeURIComponent(delivery.unsubscribeToken)}`;
       let outcome;
       try {
-        const result = await mailer.send({ to: delivery.email, subject, text: renderBody(body, mailer.publicUrl, delivery.unsubscribeToken), unsubscribeUrl: link });
+        const result = await mailer.send({ to: delivery.email, subject, text: renderBody(body, publicUrl, delivery.unsubscribeToken), unsubscribeUrl: link });
         outcome = { status: "sent", providerMessageId: result?.messageId ?? null, sentAt: new Date().toISOString() };
       } catch (error) {
         console.error("RainReady could not send a participant email:", error.message);

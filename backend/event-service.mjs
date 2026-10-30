@@ -100,13 +100,14 @@ function buildTestNotification(event, { action, reason }, decidedAt) {
   };
 }
 
-export function createEventService(store, { organizationId } = {}) {
+/** eventLimit: the organisation's plan limit (null = no limit, used by tools and tests). */
+export function createEventService(store, { organizationId, eventLimit = null } = {}) {
   if (!store) throw new TypeError("store is required");
   if (typeof organizationId !== "string" || !organizationId) throw new TypeError("organizationId is required");
   return {
     list: () => store.list(organizationId),
     get: (id) => store.get(organizationId, id),
-    create: (input) => store.create(organizationId, validateEventInput(input)),
+    create: (input) => store.create(organizationId, validateEventInput(input), { maxEvents: eventLimit }),
     async update(id, input) {
       const current = await store.get(organizationId, id);
       if (!current) return null;

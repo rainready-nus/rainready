@@ -1,0 +1,52 @@
+{
+  "image": "ACCOUNT_ID.dkr.ecr.ap-southeast-1.amazonaws.com/rainready:v1",
+  "containerPort": 8787,
+  "environment": [
+    {
+      "name": "RAINREADY_DEPLOYMENT",
+      "value": "course-demo"
+    },
+    {
+      "name": "RAINREADY_DB_DRIVER",
+      "value": "postgres"
+    },
+    {
+      "name": "RAINREADY_DB_HOST",
+      "value": "RDS_ENDPOINT"
+    },
+    {
+      "name": "RAINREADY_DB_PORT",
+      "value": "5432"
+    },
+    {
+      "name": "RAINREADY_DB_NAME",
+      "value": "rainready"
+    },
+    {
+      "name": "RAINREADY_DB_USER",
+      "value": "rainready_app"
+    },
+    {
+      "name": "RAINREADY_DB_SSL",
+      "value": "verify-full"
+    },
+    {
+      "name": "RAINREADY_MAILER",
+      "value": "outbox"
+    },
+    {
+      "name": "RAINREADY_ADS",
+      "value": "house"
+    },
+    {
+      "name": "RAINREADY_DEMO_TOOLS",
+      "value": "false"
+    }
+  ],
+  "secrets": [
+    {
+      "name": "RAINREADY_DB_PASSWORD",
+      "valueFrom": "DB_APP_SECRET_ARN:password::"
+    }
+  ]
+}

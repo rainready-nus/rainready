@@ -159,7 +159,8 @@ export function createAuthService(authStore) {
 
 export const SESSION_COOKIE_NAME = "rainready_session";
 export const sessionCookie = (token, request, maxAgeSeconds = 12 * 60 * 60) => {
-  const secure = request.socket.encrypted || process.env.RAINREADY_COOKIE_SECURE === "true" ? "; Secure" : "";
+  // request.rainreadyHttps is set by server.mjs when a trusted load balancer reports https (course-demo mode).
+  const secure = request.socket.encrypted || request.rainreadyHttps || process.env.RAINREADY_COOKIE_SECURE === "true" ? "; Secure" : "";
   return `${SESSION_COOKIE_NAME}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAgeSeconds}${secure}`;
 };
 export const clearedSessionCookie = (request) => sessionCookie("", request, 0);

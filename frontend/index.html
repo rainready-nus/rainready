@@ -39,6 +39,7 @@
     .notify-block{border:1px solid #cfe0f3;background:var(--blue-bg);border-radius:10px;padding:11px 12px;margin-top:14px;font-size:12px;color:#284d7c}.notify-block label{display:flex;gap:9px;align-items:flex-start;font-weight:650;color:var(--ink);font-size:13px}.notify-block input{margin-top:3px}.notify-block details{margin-top:8px}.notify-block summary{cursor:pointer;font-weight:600}.notify-block pre{white-space:pre-wrap;font:12px/1.45 ui-sans-serif,system-ui,sans-serif;background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;margin:8px 0 0;color:var(--ink)}
     .outbox-item{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:#fff}.outbox-item header{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)}.outbox-item b{color:var(--ink);font-size:13px}.outbox-item pre{white-space:pre-wrap;font:12px/1.45 ui-sans-serif,system-ui,sans-serif;background:#f8faf8;border-radius:8px;padding:10px;margin:8px 0 0}
     .button-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .confirm-backdrop{z-index:30}
     @media(max-width:900px){.plan-grid{grid-template-columns:1fr}}
   </style>
 </head>
@@ -128,7 +129,7 @@
   <div class="auth-backdrop" id="authGate"><div class="auth-panel"><h1 id="authTitle">Sign in to RainReady</h1><p id="authDescription">Use your account to open your organisation's private event workspace.</p><form id="authForm"><div class="field"><label for="authEmail">Email</label><input id="authEmail" type="email" autocomplete="email" required maxlength="254" /></div><div class="field" style="margin-top:12px"><label for="authPassword">Password</label><input id="authPassword" type="password" autocomplete="current-password" required minlength="12" maxlength="128" /></div><div id="registerFields" hidden><div class="field" style="margin-top:12px"><label for="authOrganization">Create organisation</label><input id="authOrganization" maxlength="120" placeholder="e.g. NUS Outdoor Sports Club" /></div><div class="field" style="margin-top:12px"><label for="authInviteCode">Or join with an invitation code</label><input id="authInviteCode" autocomplete="off" maxlength="160" placeholder="Paste a one-time code from your organisation owner" /></div></div><div class="auth-status" id="authStatus" role="status" aria-live="polite"></div><button class="primary" id="authSubmitButton" type="submit" style="width:100%;margin-top:8px">Sign in</button></form><p style="margin:16px 0 0"> <span id="authTogglePrompt">New to RainReady?</span> <button class="auth-toggle" id="authModeToggle" type="button">Create account</button></p></div></div>
   <div class="modal-backdrop" id="inviteModal" role="dialog" aria-modal="true" aria-labelledby="inviteModalTitle"><div class="modal"><div class="modal-head"><div><h2 id="inviteModalTitle">Invite a teammate</h2><p>Share this one-time code with a trusted teammate. It expires in seven days.</p></div><button class="close" id="closeInviteModal" aria-label="Close">×</button></div><div class="notification-preview" id="inviteCodeValue"></div><div class="form-actions"><button class="secondary" id="copyInviteCode" type="button">Copy code</button><button class="primary" id="doneInviteModal" type="button">Done</button></div></div></div>
   <div class="modal-backdrop" id="membersModal" role="dialog" aria-modal="true" aria-labelledby="membersModalTitle"><div class="modal"><div class="modal-head"><div><h2 id="membersModalTitle">Organisation members</h2><p>Removing a member revokes their sessions and access to this organisation.</p></div><button class="close" id="closeMembersModal" aria-label="Close">×</button></div><div id="membersList" class="log" aria-live="polite"></div><div class="form-actions"><button class="primary" id="doneMembersModal" type="button">Done</button></div></div></div>
-  <div class="modal-backdrop" id="eventModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal"><div class="modal-head"><div><h2 id="modalTitle">Add an event</h2><p>Event records are stored by the local RainReady backend.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><form id="eventForm"><div class="form-grid">
+  <div class="modal-backdrop" id="eventModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal"><div class="modal-head"><div><h2 id="modalTitle">Add an event</h2><p>Event records are stored by the local RainReady backend.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><form id="eventForm"><div class="form-grid"><div class="field full" id="templateField" hidden><label for="eventTemplate">Start from a past event</label><select id="eventTemplate"><option value="">Blank event</option></select><small class="muted-note" id="templateNote" style="margin:0"></small></div>
     <div class="field full"><label for="eventName">Event name</label><input id="eventName" name="name" required maxlength="120" placeholder="e.g. Campus Sports Day" /></div>
     <div class="field full"><label for="venueSearch">Search main venue (Singapore place name or address)</label><div class="search-row"><input id="venueSearch" maxlength="120" placeholder="e.g. University Town, Singapore" autocomplete="off" /><button class="primary" type="button" data-geocode="main">Search</button><button class="secondary" type="button" data-demo-location="main">Use demo venue</button></div><div class="location-status" id="mainLocationStatus" role="status" aria-live="polite"></div><div class="search-results" id="mainLocationResults"></div></div>
     <div class="field full"><label for="venue">Selected main venue</label><input id="venue" name="venue" required maxlength="160" readonly placeholder="Search and select the correct location above" /></div>
@@ -152,6 +153,8 @@
     <div class="section-heading" style="margin:18px 0 6px"><div><h2 id="participantsCount">Participants</h2></div><button class="secondary" type="button" id="addDemoParticipants" hidden>Add 3 demo participants</button></div>
     <div id="participantsList" class="log" aria-live="polite"></div>
     <div class="form-actions"><button class="primary" type="button" id="doneParticipants">Done</button></div></div></div>
+  <div class="modal-backdrop confirm-backdrop" id="discardDialog" role="alertdialog" aria-modal="true" aria-labelledby="discardTitle" aria-describedby="discardMessage"><div class="modal" style="width:min(400px,100%)"><div class="modal-head"><div><h2 id="discardTitle">Discard Progress</h2><p id="discardMessage" style="font-size:13px;margin-top:8px">Discard this event?</p></div></div><p class="muted-note" style="margin:0">What you typed in the form will be lost.</p><div class="form-actions"><button class="secondary" type="button" id="discardKeep">Keep editing</button><button class="primary" type="button" id="discardConfirm" style="background:var(--red);box-shadow:none">Discard</button></div></div></div>
+  <div class="modal-backdrop confirm-backdrop" id="limitDialog" role="alertdialog" aria-modal="true" aria-labelledby="limitTitle" aria-describedby="limitMessage"><div class="modal" style="width:min(420px,100%)"><div class="modal-head"><div><h2 id="limitTitle">Event limit reached</h2><p id="limitMessage" style="font-size:13px;margin-top:8px"></p></div></div><div class="form-actions"><button class="secondary" type="button" id="limitClose">Close</button><button class="primary" type="button" id="limitPlans">See plans</button></div></div></div>
   <div class="modal-backdrop" id="notificationModal" role="dialog" aria-modal="true" aria-labelledby="notificationTitle"><div class="modal"><div class="modal-head"><div><h2 id="notificationTitle">Test notification preview</h2><p>Generated from the confirmed organiser decision.</p></div><button class="close" id="closeNotificationModal" aria-label="Close">×</button></div><p class="test-mode-note" id="notificationStatus">TEST MODE — not sent.</p><p class="info-note" id="notificationEmailResult" hidden></p><div class="notification-preview" id="notificationPreview"></div><div class="form-actions"><button class="primary" type="button" id="doneNotification">Done</button></div></div></div>
   <div class="toast" id="toast" role="status"></div>
   <script>
@@ -577,7 +580,8 @@
         return `<section class="plan-card${current?" current":""}">${current?'<span class="plan-badge">Current plan</span>':""}<h2>${escapeHtml(plan.name)}</h2><div class="plan-price">${escapeHtml(plan.price)}</div><ul>${plan.features.map(f=>`<li>${escapeHtml(f)}</li>`).join("")}</ul>${action}</section>`;
       }).join("");
       const sub=b.subscription;
-      $("#billingFoot").textContent=sub?`Last change: ${sub.provider==="developer"?"developer demo switch (no payment)":`Stripe subscription, status ${sub.status}`} on ${formatDateTime(sub.updatedAt)}.`:"No subscription yet.";
+      const usage=b.usage?`Events stored: ${b.usage.events} of ${b.usage.eventLimit}. `:"";
+      $("#billingFoot").textContent=usage+(sub?`Last change: ${sub.provider==="developer"?"developer demo switch (no payment)":`Stripe subscription, status ${sub.status}`} on ${formatDateTime(sub.updatedAt)}.`:"No subscription yet.");
     }
     $("#planGrid").addEventListener("click",async event=>{
       const button=event.target.closest("button[data-billing]");if(!button)return;button.disabled=true;
@@ -638,6 +642,115 @@
     activateSession=function(data){activateSessionBeforeBilling(data);if(authState)authState.developer=Boolean(data?.developer);$("#navDeveloper").hidden=!authState?.developer;handleCheckoutReturn()};
     const showAuthGateBeforeBilling=showAuthGate;
     showAuthGate=function(...args){showAuthGateBeforeBilling(...args);$("#navDeveloper").hidden=true;extraState.org=null};
+
+    // ---- Plan limits and templates (the server enforces the limits; this explains them) ----------
+    const PLAN_EVENT_LIMITS_UI={free:1,community:100,enterprise:500};
+    const eventLimitUi=()=>PLAN_EVENT_LIMITS_UI[organizationPlan()]??1;
+    const templatesAllowed=()=>["community","enterprise"].includes(organizationPlan());
+    const limitDialog=$("#limitDialog");
+    function showLimitDialog(message){$("#limitMessage").textContent=message;limitDialog.classList.add("open");$("#limitPlans").focus()}
+    const closeLimitDialog=()=>limitDialog.classList.remove("open");
+    $("#limitClose").addEventListener("click",closeLimitDialog);
+    $("#limitPlans").addEventListener("click",()=>{closeLimitDialog();closeModal();showView("billing")});
+    limitDialog.addEventListener("click",event=>{if(event.target===limitDialog)closeLimitDialog()});
+    function limitMessage(){
+      const plan=organizationPlan();const limit=eventLimitUi();
+      if(plan==="free")return `The Free plan keeps 1 event at a time. Delete your current event to create a new one, or upgrade to Community for up to 100 events and reusable templates.`;
+      if(plan==="community")return `The Community plan keeps up to ${limit} events. Delete an old event, or upgrade to Enterprise for up to 500.`;
+      return `The Enterprise plan keeps up to ${limit} events. Delete old events to make room.`;
+    }
+    function fillTemplateField(){
+      const field=$("#templateField");const select=$("#eventTemplate");
+      if(editingEventId){field.hidden=true;return}
+      field.hidden=false;
+      const past=[...events].sort((a,b)=>`${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`));
+      select.innerHTML='<option value="">Blank event</option>'+past.map(event=>`<option value="${escapeHtml(event.id)}">${escapeHtml(event.name)} · ${escapeHtml(event.venue)} · ${escapeHtml(event.date)}</option>`).join("");
+      select.disabled=!templatesAllowed()||!past.length;
+      $("#templateNote").textContent=!templatesAllowed()?"Community and Enterprise plans can reuse a past event's venue, backup venue and settings.":past.length?"Copies the name, venue, backup venue, participants, type and sensitivity. Pick the new date and time.":"Your saved events will appear here as templates.";
+    }
+    const openModalBeforeLimits=openModal;
+    openModal=function(event=null){
+      if(!event&&authState&&events.length>=eventLimitUi()){showLimitDialog(limitMessage());return}
+      openModalBeforeLimits(event);fillTemplateField();
+    };
+    $("#eventTemplate").addEventListener("change",()=>{
+      const template=events.find(item=>item.id===$("#eventTemplate").value);
+      if(!template||!templatesAllowed())return;
+      const date=$("#eventDate").value;
+      openModalBeforeLimits(template);              // fills every field and keeps the saved locations
+      editingEventId=null;                          // ...but this is a NEW event
+      $("#modalTitle").textContent="Add an event";$("#saveEventButton").textContent="Save event";
+      $("#eventDate").value=date;                   // keep the date being planned, not the template's
+      fillTemplateField();$("#eventTemplate").value=template.id;
+      toast(`Copied from “${template.name}”. Check the date and time, then save.`);
+    });
+    // Events page and billing page show usage against the plan.
+    const renderEventsViewBeforeLimits=renderEventsView;
+    renderEventsView=function(){renderEventsViewBeforeLimits();const count=$("#eventsCount");if(authState)count.textContent+=` · ${PLAN_NAMES_UI()} plan: ${events.length} of ${eventLimitUi()}`};
+    const PLAN_NAMES_UI=()=>({free:"Free",community:"Community",enterprise:"Enterprise"})[organizationPlan()]||"Free";
+
+    // A dialog closes on a background click only if the press ALSO started on the background.
+    // Without this, pressing inside a field (for example to select its text) and releasing outside
+    // the dialog counts as a background click and closes the form, losing what was typed.
+    // The event and decision forms also ask before discarding what was typed when closed by a
+    // background click or Escape; the X and Cancel buttons close them directly.
+    const GUARDED_FORMS=[
+      {backdrop:"#eventModal",form:"#eventForm",close:()=>closeModal(),question:()=>editingEventId?"Discard your changes to this event?":"Discard this event?"},
+      {backdrop:"#decisionModal",form:"#decisionForm",close:()=>closeDecisionModal(),question:()=>"Discard this decision?"},
+    ];
+    const formSnapshot=form=>JSON.stringify([...form.elements].filter(el=>el.name||el.id).map(el=>[el.name||el.id,el.type==="checkbox"||el.type==="radio"?el.checked:el.value]));
+    const openSnapshots=new Map();
+    for(const guard of GUARDED_FORMS){
+      const backdrop=$(guard.backdrop);
+      // Remember the form as it was when it opened (empty, or the event being edited).
+      new MutationObserver(()=>{if(backdrop.classList.contains("open")&&!openSnapshots.has(guard.backdrop))openSnapshots.set(guard.backdrop,formSnapshot($(guard.form)));else if(!backdrop.classList.contains("open"))openSnapshots.delete(guard.backdrop)}).observe(backdrop,{attributes:true,attributeFilter:["class"]});
+    }
+    const hasUnsavedInput=guard=>openSnapshots.has(guard.backdrop)&&openSnapshots.get(guard.backdrop)!==formSnapshot($(guard.form));
+    const openGuard=()=>GUARDED_FORMS.find(guard=>$(guard.backdrop).classList.contains("open"));
+    // RainReady's own "Discard Progress" dialog (the browser's confirm() box shows the browser's
+    // name as its title, which a page cannot change).
+    const discardDialog=$("#discardDialog");let discardResolve=null;
+    function askDiscard(message){
+      return new Promise(resolve=>{
+        discardResolve=resolve;$("#discardMessage").textContent=message;
+        discardDialog.classList.add("open");$("#discardKeep").focus();
+      });
+    }
+    function answerDiscard(discard){if(!discardResolve)return;const resolve=discardResolve;discardResolve=null;discardDialog.classList.remove("open");resolve(discard)}
+    $("#discardKeep").addEventListener("click",()=>answerDiscard(false));
+    $("#discardConfirm").addEventListener("click",()=>answerDiscard(true));
+    function closeAfterAsking(guard,event){
+      if(!hasUnsavedInput(guard))return false; // nothing typed: the normal close handler runs
+      event.stopImmediatePropagation();event.preventDefault();
+      if(discardResolve)return true;
+      askDiscard(guard.question()).then(discard=>{if(discard)guard.close();else{}});
+      return true;
+    }
+    let pressStartedOn=null;
+    document.addEventListener("mousedown",event=>{pressStartedOn=event.target},true);
+    document.addEventListener("click",event=>{
+      const target=event.target;const startedOn=pressStartedOn;pressStartedOn=null;
+      if(!(target instanceof Element&&target.classList.contains("modal-backdrop")))return;
+      if(startedOn!==target){event.stopImmediatePropagation();return}
+      if(target===discardDialog){event.stopImmediatePropagation();answerDiscard(false);return}
+      const guard=GUARDED_FORMS.find(item=>$(item.backdrop)===target);
+      if(guard)closeAfterAsking(guard,event);
+    },true);
+    document.addEventListener("keydown",event=>{
+      if(event.key!=="Escape")return;
+      if(discardResolve){event.stopImmediatePropagation();event.preventDefault();answerDiscard(false);return}
+      if(limitDialog.classList.contains("open")){event.stopImmediatePropagation();closeLimitDialog();return}
+      const guard=openGuard();if(guard)closeAfterAsking(guard,event);
+    },true);
+    // Number boxes select their value on focus, so typing replaces the 0 instead of appending to it.
+    // Selected at once (not a frame later, which could swallow the first digit typed). For a mouse
+    // click, the browser would move the cursor on mouseup and undo the selection, so that one
+    // mouseup is told not to.
+    document.addEventListener("focusin",event=>{
+      const field=event.target;if(!(field instanceof HTMLInputElement&&field.type==="number"))return;
+      try{field.select()}catch{}
+      if(pressStartedOn===field)field.addEventListener("mouseup",up=>up.preventDefault(),{once:true});
+    });
   </script>
 </body>
 </html>
