@@ -282,3 +282,16 @@ test("PostgreSQL: two simultaneous decisions for one event send one email batch"
     assert.equal((await store.notifications.outbox(organizationId)).length, 1);
   });
 });
+
+test("PostgreSQL: the plan's event limit holds under simultaneous creates", { skip }, async () => {
+  await withStore(async (store) => {
+    const auth = createAuthService(store.auth);
+    const owner = await auth.register({ email: `limit-${unique()}@example.com`, password: PASSWORD, organizationName: `Limit Club ${unique()}` });
+    const organizationId = owner.organizations[0].id;
+    const events = createEventService(store, { organizationId, eventLimit: 1 });
+    const results = await Promise.allSettled([events.create(sample), events.create(sample), events.create(sample)]);
+    assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+    assert.ok(results.filter((r) => r.status === "rejected").every((r) => r.reason.code === "plan_event_limit"));
+    assert.equal(await store.count(organizationId), 1);
+  });
+});

@@ -130,7 +130,9 @@ Public routes (no account; random 32-character tokens; rate limited per IP):
 
 ## Plan and billing
 
-- `GET /api/billing` returns `{ "plan", "subscription", "plans", "stripeEnabled", "testMode": true, "canManage" }`.
+Plan limits on `POST /api/events`: Free keeps 1 event, Community 100, Enterprise 500 (checked in the insert's transaction). Over the limit the API answers 403 `{ "error": "plan_event_limit", "plan", "limit", "count", "message" }`. Lowering a plan keeps existing events but blocks new ones until the count is under the limit.
+
+- `GET /api/billing` returns `{ "plan", "subscription", "plans", "stripeEnabled", "testMode": true, "canManage", "usage": { "events", "eventLimit", "templates" } }`.
 - `POST /api/billing/checkout` (owner only) creates a Stripe Checkout Session for Community and returns `{ "url" }` on `checkout.stripe.com`. 503 when Stripe is not configured, 409 when already on a paid plan.
 - `POST /api/billing/confirm` with `{ "sessionId": "cs_test_..." }` asks Stripe for the session and switches to Community only if it is complete, paid, and belongs to this organisation (otherwise 409).
 - `POST /api/billing/cancel` (owner only) cancels the Stripe subscription and returns to Free.

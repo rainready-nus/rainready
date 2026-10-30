@@ -1,0 +1,21 @@
+# Never copy secrets, local data or tools into the image.
+.env
+.env.*
+!.env.example
+node_modules
+backend/data
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.pem
+*.key
+.git
+.github
+.vscode
+.idea
+database
+deploy
+docs
+backend/*.test.mjs
+Dockerfile
+.dockerignore

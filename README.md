@@ -73,6 +73,14 @@ Where emails go is a server setting:
 
 ## Plans and payments (Stripe test mode)
 
+| Plan | Events stored | Templates | Sponsored messages |
+|---|---|---|---|
+| Free | 1 at a time (delete it to create another) | No | Yes |
+| Community | up to 100 | Start a new event from a past one | No |
+| Enterprise | up to 500 | Yes | No |
+
+The limit is enforced by the server in the same database transaction that saves the event, so it holds even for scripts or simultaneous clicks; the API answers 403 `plan_event_limit` with a message. At the limit, **Add event** explains the options instead of opening the form. Moving to a smaller plan never deletes events: the organisation keeps them but cannot add another until it is under the new limit. In the Add event form, Community and Enterprise can pick **Start from a past event**, which copies the name, venues (with their saved coordinates), participants, type and sensitivity; the organiser sets the new date and time.
+
 **Plan & billing** shows Free, Community and Enterprise. The organisation owner can upgrade to Community with **Stripe Checkout in test mode**: RainReady creates a Checkout Session, the browser goes to Stripe's page (card `4242 4242 4242 4242`, any future date, any CVC), and on return RainReady asks Stripe for that session and switches the plan only if Stripe says it was paid for this organisation. A signed webhook does the same in the cloud and also handles cancellations made in Stripe. Card details never reach RainReady. Only Stripe **test** keys are accepted; live keys stop the server at start-up.
 
 Setup (free Stripe account, test mode): create a product "RainReady Community" with a recurring monthly price, then set in `.env`: `RAINREADY_STRIPE_SECRET_KEY=sk_test_...` and `RAINREADY_STRIPE_PRICE_COMMUNITY=price_...`. For the webhook on the cloud deployment, add an endpoint `https://<your domain>/api/billing/webhook` for `checkout.session.completed`, `customer.subscription.updated` and `customer.subscription.deleted`, and set `RAINREADY_STRIPE_WEBHOOK_SECRET=whsec_...`. Locally, the webhook is optional (`stripe listen --forward-to localhost:8787/api/billing/webhook` if you have the Stripe CLI). Without Stripe keys, the page says payments are not set up and nobody can upgrade except through `npm run plan` or the developer tools.
@@ -97,9 +105,15 @@ SQLite here is for a single-machine prototype, not a hardened production databas
 
 [`database/postgres/`](database/postgres/README.md) holds a local PostgreSQL 16 + PostGIS database in Docker with the same tables as the SQLite store, plus row-level security per organisation, append-only decisions and previews, stored risk assessments, organiser-confirmed lightning alerts (no `continue` until an all-clear is recorded), data-source freshness and an audit log. `npm run db:export` copies existing SQLite data into a PostgreSQL load script without modifying the SQLite file. The backend still uses SQLite until a PostgreSQL storage adapter is added; the steps are listed in that folder's README. This is also the schema intended for RDS PostgreSQL later.
 
-## Cloud deployment direction (not implemented; public mode is blocked)
+## AWS course demo (ECS Express Mode + RDS)
 
-The local app/database are not deployed. A likely AWS prototype architecture is a static frontend on S3 + CloudFront, an API on API Gateway + Lambda, and managed application storage on Amazon RDS for PostgreSQL. Production identity should move to Amazon Cognito (or another reviewed identity provider), with backend verification and server-side organisation membership checks. Scheduled ingestion/monitoring can be evaluated with EventBridge and CloudWatch. This is a future migration plan—not a claim that AWS resources or cloud persistence are already running. Confirm course-account permissions, quotas and cost before provisioning. The current local password/session implementation is not approved for public or AWS exposure. Setting `RAINREADY_PUBLIC_DEPLOYMENT=true` intentionally causes the local server to fail at startup; this is a guardrail, not a production mode switch.
+For the course demo, the whole app (frontend and backend in one container) runs on **Amazon ECS Express Mode**, which provides an HTTPS address (`https://<name>.ecs.ap-southeast-1.on.aws`), a load balancer and logs, with **Amazon RDS for PostgreSQL** as the database and **AWS Secrets Manager** for passwords and keys. The setup guide's Part C walks through it; the files are `Dockerfile`, `.dockerignore` and `deploy/aws/`.
+
+The container runs with `RAINREADY_DEPLOYMENT=course-demo`. In this mode the server listens on all addresses inside the container, trusts the load balancer's `X-Forwarded-Proto`/`X-Forwarded-For` headers (so the origin check sees https and rate limits see each visitor), always sets `Secure` cookies, requires an `Origin` header on changes, and refuses to start unless the database is PostgreSQL over verified TLS. Without the mode, the server refuses to listen on anything but `127.0.0.1`. This is still the prototype's own sign-in, so use synthetic accounts and data only and take the service down after the demo; the production gates below still apply, and `RAINREADY_PUBLIC_DEPLOYMENT=true` stays blocked.
+
+## Production direction (not implemented)
+
+A production architecture would add a static frontend on S3 + CloudFront, an API on API Gateway + Lambda or ECS, and managed application storage on Amazon RDS for PostgreSQL. Production identity should move to Amazon Cognito (or another reviewed identity provider), with backend verification and server-side organisation membership checks. Scheduled ingestion/monitoring can be evaluated with EventBridge and CloudWatch. This is a future migration plan—not a claim that AWS resources or cloud persistence are already running. Confirm course-account permissions, quotas and cost before provisioning. The current local password/session implementation is not approved for public or AWS exposure. Setting `RAINREADY_PUBLIC_DEPLOYMENT=true` intentionally causes the local server to fail at startup; this is a guardrail, not a production mode switch.
 
 Before any public release, the team must complete and verify all of these gates:
 

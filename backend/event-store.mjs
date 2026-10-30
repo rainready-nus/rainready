@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { createNotificationSchema, createSqliteNotificationStore } from "./notification-store-sqlite.mjs";
+import { PlanLimitError } from "./plans.mjs";
 
 function parseLegacyEvents(filePath) {
   if (!filePath || !existsSync(filePath)) return [];
@@ -396,11 +397,26 @@ export function createEventStore({ databasePath, legacyFilePath = null } = {}) {
       return db.prepare("SELECT id FROM events WHERE organization_id = ? ORDER BY created_at, rowid").all(organizationId).map(({ id }) => get(organizationId, id));
     },
     async get(organizationId, id) { return get(organizationId, id); },
-    async create(organizationId, fields) {
+    /** maxEvents (the plan's limit) is checked in the same transaction as the insert. */
+    async create(organizationId, fields, { maxEvents = null } = {}) {
       const now = new Date().toISOString();
       const event = { id: randomUUID(), organizationId, ...fields, createdAt: now, updatedAt: now, decisions: [] };
-      insertEventRecord(event);
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        if (maxEvents !== null) {
+          const count = db.prepare("SELECT count(*) AS n FROM events WHERE organization_id = ?").get(organizationId).n;
+          if (count >= maxEvents) throw new PlanLimitError({ limit: maxEvents, count });
+        }
+        insertEventRecord(event);
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
       return get(organizationId, event.id);
+    },
+    async count(organizationId) {
+      return db.prepare("SELECT count(*) AS n FROM events WHERE organization_id = ?").get(organizationId).n;
     },
     async update(organizationId, id, fields) {
       const current = get(organizationId, id);

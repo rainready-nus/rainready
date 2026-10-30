@@ -13,11 +13,15 @@ import { ParticipantValidationError, consentText, demoParticipants, isToken, joi
 import { NOTIFY_ACTIONS, composeDecisionEmail, createConfiguredMailer, notifyParticipants, publicUrlFromEnv, renderBody } from "./notifications.mjs";
 import { BillingError, applyStripeEvent, billingConfigFromEnv, createStripeClient, currentPlanFromStripe, planCatalogue, planFromCheckoutSession, verifyStripeSignature } from "./billing.mjs";
 import { developerConfigFromEnv, isDeveloper } from "./developer.mjs";
+import { PLAN_EVENT_LIMITS, PLAN_NAMES, PlanLimitError, canUseTemplates, eventLimitFor } from "./plans.mjs";
+import { clientAddress, deploymentFromEnv, requestProtocol } from "./deployment.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendPath = path.join(root, "frontend", "index.html");
 const participantPagePath = path.join(root, "frontend", "join.html");
 assertLocalPrototypeSafeEnvironment();
+// RAINREADY_DEPLOYMENT=local (default, 127.0.0.1 only) or course-demo (AWS load balancer); see deployment.mjs.
+const configuredDeployment = deploymentFromEnv();
 
 /**
  * RAINREADY_DB_DRIVER selects the store: "sqlite" (default) or "postgres".
@@ -115,9 +119,10 @@ async function readJsonBody(request) {
 export function createServer({
   snapshot = getWeatherSnapshot, geocoder = searchOneMap, cache = new Map(), store = eventStore, ads = configuredAds,
   mailer = configuredMailer, billing = configuredBilling, stripe = createStripeClient(billing), developer = configuredDeveloper,
+  planEventLimits = PLAN_EVENT_LIMITS, deployment = configuredDeployment,
 } = {}) {
   assertLocalPrototypeSafeEnvironment();
-  const publicUrl = mailer.publicUrl ?? publicUrlFromEnv();
+  const configuredPublicUrl = mailer.publicUrl ?? publicUrlFromEnv();
   const auth = createAuthService(store.auth);
   const allowedOrigins = (process.env.RAINREADY_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
   const currentSession = async (request) => auth.resolveSession(readSessionCookie(request));
@@ -132,8 +137,8 @@ export function createServer({
   };
   const sameOriginMutation = (request) => {
     const origin = request.headers.origin;
-    if (!origin) return process.env.RAINREADY_REQUIRE_ORIGIN !== "true";
-    const protocol = request.socket.encrypted ? "https:" : "http:";
+    if (!origin) return !deployment.requireOrigin && process.env.RAINREADY_REQUIRE_ORIGIN !== "true";
+    const protocol = requestProtocol(request, deployment);
     try {
       const receivedOrigin = new URL(origin).origin;
       const sameOrigin = receivedOrigin === new URL(request.url ?? "/", `${protocol}//${request.headers.host}`).origin;
@@ -143,6 +148,14 @@ export function createServer({
   };
   const handleRequest = async (request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
+    // Behind the AWS load balancer the visitor used https even though this hop is plain http.
+    request.rainreadyHttps = deployment.secureCookies || requestProtocol(request, deployment) === "https:";
+    // Base address for links in emails and Stripe return pages: RAINREADY_PUBLIC_URL when set.
+    // Behind the AWS load balancer without it, the address the visitor used (the balancer only
+    // forwards requests for its own host name, so this cannot point somewhere else).
+    const publicUrl = deployment.trustProxy && !deployment.publicUrlSet && /^[A-Za-z0-9.-]+(:\d+)?$/.test(String(request.headers.host ?? ""))
+      ? `${requestProtocol(request, deployment)}//${request.headers.host}`
+      : configuredPublicUrl;
     if (request.method === "GET" && url.pathname === "/health") {
       return sendJson(response, 200, {
         status: "ok",
@@ -182,7 +195,7 @@ export function createServer({
         // Separate counters for page loads and sign-ups. Generous enough for a shared campus or venue
         // network (one IP for many people). Behind a load balancer, the client IP must come from a
         // trusted proxy header instead of the socket address (not configured in this prototype).
-        keyHash: hashToken(`public-${kind}-${request.method === "GET" ? "view" : "submit"}:${request.socket.remoteAddress ?? "local"}`),
+        keyHash: hashToken(`public-${kind}-${request.method === "GET" ? "view" : "submit"}:${clientAddress(request, deployment)}`),
         now: Date.now(), windowMs: 15 * 60 * 1000, maxAttempts: request.method === "GET" ? 300 : 60,
       });
       if (!limit.allowed) {
@@ -246,7 +259,7 @@ export function createServer({
 
     if (request.method === "POST" && ["/api/auth/register", "/api/auth/login"].includes(url.pathname)) {
       const isRegister = url.pathname.endsWith("register");
-      const bucket = `${isRegister ? "register" : "login"}:${request.socket.remoteAddress ?? "local"}`;
+      const bucket = `${isRegister ? "register" : "login"}:${clientAddress(request, deployment)}`;
       const limit = await store.auth.consumeRateLimit({
         keyHash: hashToken(bucket), now: Date.now(), windowMs: 15 * 60 * 1000, maxAttempts: isRegister ? 5 : 10,
       });
@@ -424,7 +437,9 @@ export function createServer({
         return sendJson(response, 403, { error: "cross_origin_request", message: "Cross-origin requests are not allowed." });
       }
     }
-    const events = activeOrganization ? createEventService(store, { organizationId: activeOrganization.id }) : null;
+    const activePlan = activeOrganization?.plan ?? "free";
+    const eventLimit = activeOrganization ? eventLimitFor(activePlan, planEventLimits) : null;
+    const events = activeOrganization ? createEventService(store, { organizationId: activeOrganization.id, eventLimit }) : null;
 
     // ---- Participants (organiser side) ----------------------------------------
     if (url.pathname === "/api/participants/counts" && request.method === "GET") {
@@ -484,6 +499,7 @@ export function createServer({
         plan: organization?.plan ?? "free",
         subscription: subscription ? { provider: subscription.provider, plan: subscription.plan, status: subscription.status, updatedAt: subscription.updatedAt } : null,
         plans: planCatalogue(billing),
+        usage: { events: await store.count(activeOrganization.id), eventLimit: eventLimitFor(organization?.plan ?? "free", planEventLimits), templates: canUseTemplates(organization?.plan ?? "free") },
         stripeEnabled: Boolean(stripe),
         testMode: true,
         canManage: activeOrganization.role === "owner",
@@ -612,6 +628,13 @@ export function createServer({
         const event = await events.create(await readJsonBody(request));
         return sendJson(response, 201, { event });
       } catch (error) {
+        if (error instanceof PlanLimitError) {
+          const upgrade = activePlan === "free" ? " Delete your current event to create a new one, or upgrade to Community for up to 100 events." : activePlan === "community" ? " Delete an old event or upgrade to Enterprise for up to 500 events." : " Delete old events to make room.";
+          return sendJson(response, 403, {
+            error: "plan_event_limit", plan: activePlan, limit: error.limit, count: error.count,
+            message: `The ${PLAN_NAMES[activePlan]} plan allows ${error.limit} event${error.limit === 1 ? "" : "s"} at a time.${upgrade}`,
+          });
+        }
         const status = error instanceof EventValidationError || error instanceof RangeError ? 400 : 500;
         return sendJson(response, status, { error: status === 400 ? "invalid_event" : "event_store_error", message: error.message });
       }
@@ -645,7 +668,7 @@ export function createServer({
             try {
               const sent = await notifyParticipants({
                 store, mailer, organizationId: activeOrganization.id, organizationName: activeOrganization.name,
-                event: result.event, decision: result.decision, userId: session.user.id,
+                event: result.event, decision: result.decision, userId: session.user.id, publicUrl,
               });
               notification = sent.skipped
                 ? { status: "skipped", reason: sent.skipped }
@@ -786,8 +809,18 @@ const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPat
 if (isMain) {
   const port = Number(process.env.PORT ?? 8787);
   const server = createServer();
-  server.listen(port, "127.0.0.1", () => {
-    console.log(`RainReady is running at http://127.0.0.1:${port}`);
+  server.listen(port, configuredDeployment.host, () => {
+    console.log(configuredDeployment.mode === "course-demo"
+      ? `RainReady (course demo, behind the AWS load balancer) is listening on ${configuredDeployment.host}:${port}`
+      : `RainReady is running at http://127.0.0.1:${port}`);
+    if (configuredDeployment.mode === "course-demo" && !configuredDeployment.publicUrlSet) {
+      console.log("  RAINREADY_PUBLIC_URL is not set: join, unsubscribe and Stripe links use the address visitors open (the load balancer's https address).");
+    }
+    // Settings that change what the demo shows, so a missing .env line is easy to spot.
+    console.log(`  Participant emails: ${configuredMailer.name === "ses" ? "Amazon SES (real emails)" : "outbox only (nothing is sent)"}`);
+    console.log(`  Payments: ${configuredBilling.stripeEnabled ? "Stripe test mode" : "not set up (no Stripe test keys)"}`);
+    const developerCount = configuredDeveloper.userIds.size;
+    console.log(`  Developer demo tools: ${configuredDeveloper.enabled ? `on for ${developerCount} user ID${developerCount === 1 ? "" : "s"}` : process.env.RAINREADY_DEMO_TOOLS === "true" ? "off (RAINREADY_DEVELOPER_USER_IDS is empty)" : "off"}`);
   });
 }
 

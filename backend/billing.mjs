@@ -1,7 +1,7 @@
 /**
  * Plan and billing: Stripe Checkout in TEST MODE for the Community plan.
  *
- *   RAINREADY_STRIPE_SECRET_KEY       sk_test_... (live keys are refused in this prototype)
+ *   RAINREADY_STRIPE_SECRET_KEY       sk_test_... or a restricted rk_test_... key (live keys are refused)
  *   RAINREADY_STRIPE_PRICE_COMMUNITY  price_... of a recurring price created in the Stripe dashboard
  *   RAINREADY_STRIPE_WEBHOOK_SECRET   whsec_... for POST /api/billing/webhook (optional locally)
  *   RAINREADY_PLAN_COMMUNITY_PRICE    label shown on the page, default "S$29 per month"
@@ -31,8 +31,8 @@ export function billingConfigFromEnv(environment = process.env) {
   const secretKey = String(environment.RAINREADY_STRIPE_SECRET_KEY ?? "").trim();
   const priceCommunity = String(environment.RAINREADY_STRIPE_PRICE_COMMUNITY ?? "").trim();
   const webhookSecret = String(environment.RAINREADY_STRIPE_WEBHOOK_SECRET ?? "").trim();
-  if (secretKey && !secretKey.startsWith("sk_test_")) {
-    throw new BillingError(500, "stripe_live_key", "RAINREADY_STRIPE_SECRET_KEY must be a Stripe TEST key (sk_test_...). Live payments are not enabled in this prototype.");
+  if (secretKey && !/^(sk|rk)_test_/.test(secretKey)) {
+    throw new BillingError(500, "stripe_live_key", "RAINREADY_STRIPE_SECRET_KEY must be a Stripe sandbox (test) key: sk_test_... or rk_test_.... Live payments are not enabled in this prototype.");
   }
   if (secretKey && !/^price_[A-Za-z0-9]+$/.test(priceCommunity)) {
     throw new BillingError(500, "stripe_price_missing", "Set RAINREADY_STRIPE_PRICE_COMMUNITY to the price_... id of the Community plan's recurring price.");
@@ -51,9 +51,9 @@ export function billingConfigFromEnv(environment = process.env) {
 
 export function planCatalogue(config) {
   return [
-    { id: "free", name: "Free", price: "S$0", features: ["Weather risk and decisions for your events", "Participant email updates", "Sponsored messages at the bottom of each page"], purchasable: false },
-    { id: "community", name: "Community", price: config.communityPriceLabel, features: ["Everything in Free", "No sponsored messages", "Team access and notification history"], purchasable: true },
-    { id: "enterprise", name: "Enterprise", price: "Contact us", features: ["Everything in Community", "Multi-venue governance, exports and API access"], purchasable: false },
+    { id: "free", name: "Free", price: "S$0", features: ["1 event at a time (delete it to create another)", "Weather risk, decisions and participant email updates", "Sponsored messages at the bottom of each page"], purchasable: false },
+    { id: "community", name: "Community", price: config.communityPriceLabel, features: ["Up to 100 events", "Reuse past events as templates", "No sponsored messages"], purchasable: true },
+    { id: "enterprise", name: "Enterprise", price: "Contact us", features: ["Up to 500 events", "Everything in Community", "Multi-venue governance, exports and API access"], purchasable: false },
   ];
 }
 

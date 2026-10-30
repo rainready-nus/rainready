@@ -157,7 +157,8 @@ test("confirming relocate with 'Email participants' emails subscribed participan
     assert.equal(repeat.duplicate, true);
     assert.equal((await store.notifications.outbox(owner.organizationId)).length, 1);
 
-    // No participants -> skipped, decision still saved.
+    // No participants -> skipped, decision still saved. (A second event needs a paid plan.)
+    await store.auth.setOrganizationPlan(owner.organizationId, "community");
     const empty = await createEvent(owner, { name: "Empty Event" });
     const skipped = await (await owner.api(`/api/events/${empty.id}/decisions`, { method: "POST", body: { action: "cancel", reason: "Haze", notifyParticipants: true } })).json();
     assert.deepEqual(skipped.notification, { status: "skipped", reason: "no_participants" });
@@ -216,7 +217,9 @@ test("mailer and billing configuration refuse unsafe settings", () => {
   assert.throws(() => mailerConfigFromEnv({ RAINREADY_MAILER: "ses" }), /RAINREADY_MAIL_FROM/);
   assert.throws(() => mailerConfigFromEnv({ RAINREADY_PUBLIC_URL: "https://user:pw@example.org" }), /plain/);
   assert.equal(mailerConfigFromEnv({}).mode, "outbox");
-  assert.throws(() => billingConfigFromEnv({ RAINREADY_STRIPE_SECRET_KEY: "sk_live_abc", RAINREADY_STRIPE_PRICE_COMMUNITY: "price_1" }), /TEST key/);
+  assert.throws(() => billingConfigFromEnv({ RAINREADY_STRIPE_SECRET_KEY: "sk_live_abc", RAINREADY_STRIPE_PRICE_COMMUNITY: "price_1" }), /test\) key/);
+  assert.throws(() => billingConfigFromEnv({ RAINREADY_STRIPE_SECRET_KEY: "rk_live_abc", RAINREADY_STRIPE_PRICE_COMMUNITY: "price_1" }), /test\) key/);
+  assert.equal(billingConfigFromEnv({ RAINREADY_STRIPE_SECRET_KEY: "rk_test_abc", RAINREADY_STRIPE_PRICE_COMMUNITY: "price_1" }).stripeEnabled, true);
   assert.throws(() => billingConfigFromEnv({ RAINREADY_STRIPE_SECRET_KEY: "sk_test_abc" }), /PRICE_COMMUNITY/);
   assert.equal(billingConfigFromEnv({}).stripeEnabled, false);
   assert.equal(developerConfigFromEnv({ RAINREADY_DEMO_TOOLS: "true" }).enabled, false, "needs developer user ids too");
@@ -485,5 +488,44 @@ test("developer demo tools exist only for listed developer user ids", async () =
     assert.equal(box.emails.length, 3);
     assert.match(box.emails[0].body, /https:\/\/rainready\.example\.org\/unsubscribe\/[A-Za-z0-9_-]{20,}/);
     assert.equal(box.emails[0].unsubscribeToken, undefined);
+  });
+});
+
+test("plans limit stored events: Free 1, Community 100, Enterprise 500; downgrades keep events but block new ones", async () => {
+  await withServer({}, async (base, store) => {
+    const owner = await signUp(base);
+    const first = await createEvent(owner, { name: "First" });
+    const blocked = await owner.api("/api/events", { method: "POST", body: { ...sampleEvent, name: "Second" } });
+    assert.equal(blocked.status, 403);
+    const body = await blocked.json();
+    assert.equal(body.error, "plan_event_limit");
+    assert.deepEqual([body.plan, body.limit, body.count], ["free", 1, 1]);
+    assert.match(body.message, /Delete your current event/);
+    // Delete it, then a new one is allowed.
+    assert.equal((await owner.api(`/api/events/${first.id}`, { method: "DELETE" })).status, 200);
+    await createEvent(owner, { name: "Replacement" });
+
+    // Two simultaneous creates on Free: only one can win.
+    const other = await signUp(base);
+    const results = await Promise.all([1, 2].map((n) => other.api("/api/events", { method: "POST", body: { ...sampleEvent, name: `Race ${n}` } })));
+    assert.deepEqual(results.map((r) => r.status).sort(), [201, 403]);
+
+    // Community: up to 100.
+    await store.auth.setOrganizationPlan(owner.organizationId, "community");
+    for (let index = 1; index < 100; index += 1) await createEvent(owner, { name: `Event ${index}` });
+    assert.equal(await store.count(owner.organizationId), 100);
+    assert.equal((await owner.api("/api/events", { method: "POST", body: sampleEvent })).status, 403);
+    const view = await (await owner.api("/api/billing")).json();
+    assert.deepEqual(view.usage, { events: 100, eventLimit: 100, templates: true });
+
+    // Enterprise: room for more.
+    await store.auth.setOrganizationPlan(owner.organizationId, "enterprise");
+    assert.equal((await owner.api("/api/events", { method: "POST", body: sampleEvent })).status, 201);
+
+    // Back to Free: all 101 events are kept, but no new one until the organisation is under the limit again.
+    await store.auth.setOrganizationPlan(owner.organizationId, "free");
+    assert.equal((await (await owner.api("/api/events")).json()).events.length, 101);
+    assert.equal((await owner.api("/api/events", { method: "POST", body: sampleEvent })).status, 403);
+    assert.equal((await (await owner.api("/api/billing")).json()).usage.templates, false);
   });
 });

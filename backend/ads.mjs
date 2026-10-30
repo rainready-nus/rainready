@@ -22,9 +22,8 @@ import path from "node:path";
 
 /** Where an ad may appear: one slot at the bottom of each workspace page, never inside forms or dialogs. */
 export const AD_PLACEMENTS = Object.freeze(["overview", "events", "decisions", "settings"]);
-/** Subscription plans. Only paid plans are ad-free; users cannot switch ads off themselves. */
-export const PLANS = Object.freeze(["free", "community", "enterprise"]);
-export const isAdFreePlan = (plan) => PLANS.includes(plan) && plan !== "free";
+/** Subscription plans (plans.mjs). Only paid plans are ad-free; users cannot switch ads off themselves. */
+export { PLANS, isAdFreePlan } from "./plans.mjs";
 
 /** Page context sent by the browser. "wet" means at least one upcoming event needs a wet-weather plan. */
 export const AD_CONTEXTS = Object.freeze(["general", "wet"]);
