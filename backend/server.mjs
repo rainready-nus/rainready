@@ -15,6 +15,8 @@ import { BillingError, applyStripeEvent, billingConfigFromEnv, createStripeClien
 import { developerConfigFromEnv, isDeveloper } from "./developer.mjs";
 import { PLAN_EVENT_LIMITS, PLAN_NAMES, PlanLimitError, canUseTemplates, eventLimitFor } from "./plans.mjs";
 import { clientAddress, deploymentFromEnv, requestProtocol } from "./deployment.mjs";
+import { setupRequested, startDatabaseSetup } from "./db-setup.mjs";
+import { isSimulation, labelSimulatedAssessment, simulateSnapshot, simulationCatalogue } from "./weather-simulation.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendPath = path.join(root, "frontend", "index.html");
@@ -119,7 +121,7 @@ async function readJsonBody(request) {
 export function createServer({
   snapshot = getWeatherSnapshot, geocoder = searchOneMap, cache = new Map(), store = eventStore, ads = configuredAds,
   mailer = configuredMailer, billing = configuredBilling, stripe = createStripeClient(billing), developer = configuredDeveloper,
-  planEventLimits = PLAN_EVENT_LIMITS, deployment = configuredDeployment,
+  planEventLimits = PLAN_EVENT_LIMITS, deployment = configuredDeployment, databaseSetup = null,
 } = {}) {
   assertLocalPrototypeSafeEnvironment();
   const configuredPublicUrl = mailer.publicUrl ?? publicUrlFromEnv();
@@ -162,6 +164,7 @@ export function createServer({
         version: "0.5.0",
         storage: store.driver || "sqlite",
         ads: ads.mode,
+        ...(databaseSetup ? { databaseSetup: databaseSetup.status, databaseSetupMessage: databaseSetup.message } : {}),
         checkedAt: new Date().toISOString(),
       });
     }
@@ -484,7 +487,8 @@ export function createServer({
       if (action === "relocate" && !event.backupVenue) return sendJson(response, 200, { notifies: false, recipientCount: 0 });
       const recipients = await store.participants.recipients(activeOrganization.id, eventId);
       const reason = (url.searchParams.get("reason") ?? "").slice(0, 1000) || "(the reason you enter)";
-      const email = composeDecisionEmail({ event, decision: { action, reason }, organizationName: activeOrganization.name });
+      const demo = isSimulation(url.searchParams.get("simulation")) && isDeveloper(developer, session.user);
+      const email = composeDecisionEmail({ event, decision: { action, reason }, organizationName: activeOrganization.name, demo });
       return sendJson(response, 200, { notifies: true, recipientCount: recipients.length, mailer: mailer.name, subject: email.subject, body: renderBody(email.body, publicUrl, "UNSUBSCRIBE-LINK-PER-RECIPIENT").replace(/\/unsubscribe\/UNSUBSCRIBE-LINK-PER-RECIPIENT/, "/unsubscribe/…") });
     }
     if (url.pathname === "/api/notifications" && request.method === "GET") {
@@ -560,7 +564,7 @@ export function createServer({
     if (url.pathname.startsWith("/api/dev/")) {
       if (!isDeveloper(developer, session.user)) return sendJson(response, 404, { error: "not_found" });
       if (url.pathname === "/api/dev/status" && request.method === "GET") {
-        return sendJson(response, 200, { mailer: mailer.name, publicUrl, stripeEnabled: Boolean(stripe), webhookConfigured: Boolean(billing.webhookSecret), plan: (await store.auth.getOrganization(activeOrganization.id))?.plan ?? "free" });
+        return sendJson(response, 200, { mailer: mailer.name, publicUrl, stripeEnabled: Boolean(stripe), webhookConfigured: Boolean(billing.webhookSecret), plan: (await store.auth.getOrganization(activeOrganization.id))?.plan ?? "free", simulations: simulationCatalogue() });
       }
       if (url.pathname === "/api/dev/plan" && request.method === "POST") {
         const plan = (await readJsonBody(request))?.plan;
@@ -669,6 +673,8 @@ export function createServer({
               const sent = await notifyParticipants({
                 store, mailer, organizationId: activeOrganization.id, organizationName: activeOrganization.name,
                 event: result.event, decision: result.decision, userId: session.user.id, publicUrl,
+                // A decision made during a developer's weather simulation sends a clearly marked demo email.
+                demo: isSimulation(body?.simulation) && isDeveloper(developer, session.user),
               });
               notification = sent.skipped
                 ? { status: "skipped", reason: sent.skipped }
@@ -751,6 +757,12 @@ export function createServer({
       const sensitivity = url.searchParams.get("sensitivity");
       const activityType = url.searchParams.get("activityType") ?? "Other";
       const lightningStatus = url.searchParams.get("lightningStatus") ?? "none";
+      // Developer-only extreme-weather simulation (weather-simulation.mjs); unknown to everyone else.
+      const simulate = url.searchParams.get("simulate");
+      if (simulate !== null) {
+        if (!isDeveloper(developer, session.user)) return sendJson(response, 404, { error: "not_found" });
+        if (!isSimulation(simulate)) return sendJson(response, 400, { error: "invalid_assessment_input", message: "simulate must be lightning, thunderstorm or haze" });
+      }
       let eventDateTime;
       try {
         latitude = parseCoordinate(url.searchParams.get("latitude"), "latitude", -90, 90);
@@ -770,9 +782,14 @@ export function createServer({
       }
 
       try {
-        const snapshotResult = await snapshot({ latitude, longitude, cache });
-        const assessment = buildRiskAssessment({ snapshot: snapshotResult, sensitivity, lightningStatus, eventDateTime, activityType });
-        return sendJson(response, 200, { ...snapshotResult, assessment });
+        const realSnapshot = await snapshot({ latitude, longitude, cache });
+        if (simulate) {
+          const simulated = simulateSnapshot(realSnapshot, simulate, eventDateTime);
+          const assessment = buildRiskAssessment({ snapshot: simulated, sensitivity, lightningStatus: simulate === "lightning" ? "confirmed_alert" : lightningStatus, eventDateTime, activityType });
+          return sendJson(response, 200, { ...simulated, assessment: labelSimulatedAssessment(assessment, simulate) });
+        }
+        const assessment = buildRiskAssessment({ snapshot: realSnapshot, sensitivity, lightningStatus, eventDateTime, activityType });
+        return sendJson(response, 200, { ...realSnapshot, assessment });
       } catch (error) {
         return sendJson(response, 502, {
           error: "assessment_service_error",
@@ -808,7 +825,13 @@ export function createServer({
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   const port = Number(process.env.PORT ?? 8787);
-  const server = createServer();
+  // RAINREADY_DB_SETUP=true: set up the database once, in the background (see db-setup.mjs).
+  let databaseSetup = null;
+  if (setupRequested(process.env)) {
+    const { sslFromEnvironment } = await import("./event-store-pg.mjs");
+    databaseSetup = startDatabaseSetup(process.env, sslFromEnvironment);
+  }
+  const server = createServer({ databaseSetup });
   server.listen(port, configuredDeployment.host, () => {
     console.log(configuredDeployment.mode === "course-demo"
       ? `RainReady (course demo, behind the AWS load balancer) is listening on ${configuredDeployment.host}:${port}`

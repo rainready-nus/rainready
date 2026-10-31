@@ -12,6 +12,10 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY backend ./backend
 COPY frontend ./frontend
+# SQL files for the one-time database setup (RAINREADY_DB_SETUP=true, see backend/db-setup.mjs).
+COPY database/postgres/init ./database/postgres/init
+COPY database/postgres/rds ./database/postgres/rds
+COPY database/postgres/migrations ./database/postgres/migrations
 
 # Amazon RDS certificate bundle, so the database connection is verified (RAINREADY_DB_SSL=verify-full).
 ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/certs/rds-global-bundle.pem

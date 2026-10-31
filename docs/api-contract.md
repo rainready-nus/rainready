@@ -146,6 +146,8 @@ Exist only when `RAINREADY_DEMO_TOOLS=true` and the signed-in user's ID is in `R
 - `POST /api/dev/plan` with `{ "plan": "free" | "community" | "enterprise" }`: switches the active organisation's plan without payment (recorded with provider `developer`).
 - `POST /api/dev/events/{eventId}/demo-participants` with `{ "count": 1-10 }`: adds synthetic `@example.com` participants.
 - `GET /api/dev/outbox`: the latest 100 participant emails of the active organisation, with the text as sent.
+- `GET /api/assessment?...&simulate=lightning|thunderstorm|haze`: the normal risk check with simulated readings for that scenario (labelled `simulation` and SIMULATED in `reasons`); 404 for non-developers. Nothing is stored.
+- `POST /api/events/{id}/decisions` and `GET /api/events/{id}/notification-preview` accept `simulation` (developers only; ignored for others): the participant email is marked `[RainReady DEMO]` and starts with a "demonstration only" line.
 
 ## Local configuration and secret handling
 

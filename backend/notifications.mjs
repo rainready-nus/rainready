@@ -94,7 +94,7 @@ export function createConfiguredMailer(environment = process.env) {
 const singleLine = (value, max = 160) => String(value ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, max);
 
 /** Subject and body template for a decision. The body holds {{unsubscribe_url}} for each recipient. */
-export function composeDecisionEmail({ event, decision, organizationName }) {
+export function composeDecisionEmail({ event, decision, organizationName, demo = false }) {
   const name = singleLine(event.name, 120);
   const when = `${event.date} at ${event.time} SGT`;
   let subject;
@@ -111,6 +111,7 @@ export function composeDecisionEmail({ event, decision, organizationName }) {
     what = [`The event on ${when} at ${singleLine(event.venue)} is cancelled.`, `Please do not travel to the venue.`];
   }
   const body = [
+    ...(demo ? [`DEMONSTRATION ONLY: this email was sent during a simulated weather alert in a RainReady demo. Nothing about the real event has changed.`, ``] : []),
     `Hello,`,
     ``,
     `${singleLine(organizationName, 120)} has an update about ${name}.`,
@@ -125,7 +126,7 @@ export function composeDecisionEmail({ event, decision, organizationName }) {
     `You are receiving this because you joined updates for this event through RainReady.`,
     `Unsubscribe: ${UNSUBSCRIBE_PLACEHOLDER}`,
   ].join("\n");
-  return { subject: `[RainReady] ${subject}`.slice(0, 200), body };
+  return { subject: `[RainReady${demo ? " DEMO" : ""}] ${subject}`.slice(0, 200), body };
 }
 
 export const renderBody = (body, publicUrl, token) => body.split(UNSUBSCRIBE_PLACEHOLDER).join(unsubscribeUrl(publicUrl, token));
@@ -134,12 +135,12 @@ export const renderBody = (body, publicUrl, token) => body.split(UNSUBSCRIBE_PLA
  * Creates the notification for a confirmed decision and sends it, a few emails at a time.
  * Returns { notification, duplicate } or { skipped: reason }.
  */
-export async function notifyParticipants({ store, mailer, organizationId, organizationName, event, decision, userId = null, concurrency = 4, publicUrl = mailer.publicUrl }) {
+export async function notifyParticipants({ store, mailer, organizationId, organizationName, event, decision, userId = null, concurrency = 4, publicUrl = mailer.publicUrl, demo = false }) {
   if (!NOTIFY_ACTIONS.includes(decision.action)) return { skipped: "action_not_notified" };
   const recipients = await store.participants.recipients(organizationId, event.id);
   if (!recipients.length) return { skipped: "no_participants" };
   if (recipients.length > MAX_RECIPIENTS) return { skipped: "too_many_participants" };
-  const { subject, body } = composeDecisionEmail({ event, decision, organizationName });
+  const { subject, body } = composeDecisionEmail({ event, decision, organizationName, demo });
   const now = new Date().toISOString();
   const created = await store.notifications.create(organizationId, {
     eventId: event.id, decisionId: decision.id, action: decision.action, subject, body, mailer: mailer.name, createdByUserId: userId, recipients, now,
