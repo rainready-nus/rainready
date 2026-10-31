@@ -28,7 +28,7 @@ const resultTypes = {
   },
 };
 
-function sslFromEnvironment(environment) {
+export function sslFromEnvironment(environment) {
   const mode = (environment.RAINREADY_DB_SSL ?? "off").toLowerCase();
   if (mode === "off") return false;
   const ca = environment.RAINREADY_DB_SSL_CA ? readFileSync(environment.RAINREADY_DB_SSL_CA, "utf8") : undefined;

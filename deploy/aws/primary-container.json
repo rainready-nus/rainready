@@ -31,6 +31,14 @@
       "value": "verify-full"
     },
     {
+      "name": "RAINREADY_DB_SETUP",
+      "value": "true"
+    },
+    {
+      "name": "RAINREADY_DB_ADMIN_USER",
+      "value": "rainready_admin"
+    },
+    {
       "name": "RAINREADY_MAILER",
       "value": "outbox"
     },
@@ -47,6 +55,10 @@
     {
       "name": "RAINREADY_DB_PASSWORD",
       "valueFrom": "DB_APP_SECRET_ARN:password::"
+    },
+    {
+      "name": "RAINREADY_DB_ADMIN_PASSWORD",
+      "valueFrom": "DB_ADMIN_SECRET_ARN:password::"
     }
   ]
 }
