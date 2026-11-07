@@ -49,13 +49,44 @@ export function setupConfigFromEnv(environment, sslFromEnvironment) {
   };
 }
 
+/** Database names the setup may create: plain lower-case identifiers only. */
+const DATABASE_NAME = /^[a-z_][a-z0-9_]{0,62}$/;
+
+/**
+ * Connects as the master user. If the database itself is missing (RDS created without an
+ * "Initial database name"), creates it from the built-in "postgres" database first.
+ */
+async function connectCreatingDatabase(pg, connection, done) {
+  const client = new pg.Client(connection);
+  try {
+    await client.connect();
+    return client;
+  } catch (error) {
+    await client.end().catch(() => {});
+    if (error.code !== "3D000" || connection.database === "postgres") throw error; // 3D000: database does not exist
+    if (!DATABASE_NAME.test(connection.database)) throw new Error(`RAINREADY_DB_NAME "${connection.database}" must be lower-case letters, digits or underscores`);
+    const maintenance = new pg.Client({ ...connection, database: "postgres" });
+    await maintenance.connect();
+    try {
+      await maintenance.query(`CREATE DATABASE "${connection.database}"`);
+    } catch (createError) {
+      if (createError.code !== "42P04") throw createError; // 42P04: created meanwhile by another task
+    } finally {
+      await maintenance.end().catch(() => {});
+    }
+    done.push(`created the database ${connection.database}`);
+    const retry = new pg.Client(connection);
+    await retry.connect();
+    return retry;
+  }
+}
+
 /** Runs the setup once. Returns a short description of what was done. */
 export async function setupDatabase({ connection, appPassword }) {
   const { default: pg } = await import("pg");
-  const client = new pg.Client(connection);
-  await client.connect();
+  const done = [];
+  const client = await connectCreatingDatabase(pg, connection, done);
   try {
-    const done = [];
     const hasEvents = (await client.query("SELECT to_regclass('public.events') IS NOT NULL AS present")).rows[0].present;
     if (!hasEvents) {
       await client.query("BEGIN");
