@@ -1,142 +1,282 @@
 # RainReady
 
-RainReady is a course-project cloud-service prototype for helping organisers monitor weather risks across outdoor events, record decisions, and prepare participant updates.
+**Weather-risk decision support for outdoor events in Singapore.**
 
-## Current prototype
+RainReady reads live NEA weather data for an event's venue, turns it into an explainable risk level for the event's start time, records the organiser's decision and emails participants when plans change. It is a multi-tenant SaaS built for NUS CS5224 Cloud Computing and deployed on AWS.
 
-The browser interface calls a local Node.js backend. The backend retrieves NEA short-range and 24-hour forecasts, the four-day daily outlook, rainfall, lightning-observation and 24-hour PSI data. Near-term checks match the saved event start to a currently published precise forecast period. For events 2–4 days ahead without that coverage, RainReady provides a clearly labelled, rough daily planning estimate from the NEA forecast description, forecast high temperature and event sensitivity, with activity-aware preparation suggestions. It is not a venue/time-specific risk score or calibrated probability; current rainfall, historical probability and future PSI are excluded, numeric wind severity is not scored without a validated unit, and backup venues are not compared at this horizon. Beyond the four-day horizon, it says no official forecast is available yet. Primary and backup venues are compared only for the same current, precise forecast window. OneMap address search lets organisers find and explicitly select main and backup venue locations; coordinates are returned and stored by the backend flow, not typed by the organiser. Historical probability is excluded until validated.
+| | |
+| --- | --- |
+| **Live service** | https://ra-13c1809023724de59192ab160bdbf122.ecs.ap-southeast-1.on.aws/ |
+| **Repository** | https://github.com/rainready-nus/rainready |
+| **Status** | Course prototype: synthetic data only, Stripe in test mode |
 
-The prototype supports:
+## Contents
 
-- creating, viewing, editing and deleting events, including main/backup venue coordinates, date/time, activity sensitivity and participant count;
-- persistent SQLite storage for events, organiser decisions and test-notification previews;
-- email/password sign-in, organisation workspaces, and owner-generated one-time invitations for teammates;
-- server-enforced organisation isolation for event lists, details, edits, decisions, deletes, weather checks and location search;
-- recording a decision (continue, prepare, relocate, postpone or cancel), required reason and timestamp;
-- generating a test-only notification preview marked `not_sent`—no email/SMS/push message is sent and no participant contact details are collected;
-- retrieving an event-start forecast, displaying freshness, explaining the routine risk score, comparing main/backup venue weather scores only for the exact same current forecast window, and presenting a separate NEA-aligned PSI advisory;
-- showing a provisional daily planning estimate for 2–4-day events from forecast description, forecast high temperature and event sensitivity, plus tailored preparation suggestions; clearly labels the Singapore-wide daily scope, excludes future PSI and live rainfall, does not score numeric wind without a validated unit, and does not compare venues;
-- applying a backend stop-and-shelter override when an organiser explicitly confirms the local demo lightning alert, without treating the observation feed as an official warning or automatically resuming an activity;
-- searching OneMap by Singapore place name/address, reviewing matching addresses and confirming a result before saving its coordinates;
-- showing one clearly labelled sponsored message (ad) at the bottom of each workspace page for the Free plan, with aggregated impression and click counts for reporting (see below);
-- letting participants join an event's email updates through a join link with explicit consent, and emailing them when the organiser confirms a relocation, postponement or cancellation;
-- a Plan & billing page with Stripe Checkout in test mode for the Community plan, and developer-only demo tools for comparing the Free and paid plans.
+- [Features](#features)
+- [Architecture](#architecture)
+- [Tech stack](#tech-stack)
+- [Repository structure](#repository-structure)
+- [Getting started (local)](#getting-started-local)
+- [Configuration](#configuration)
+- [Deployment on AWS](#deployment-on-aws)
+- [Testing](#testing)
+- [API overview](#api-overview)
+- [How the risk score works](#how-the-risk-score-works)
+- [Security and privacy](#security-and-privacy)
+- [Demo guide](#demo-guide)
+- [Limitations and roadmap](#limitations-and-roadmap)
+- [Contributing](#contributing)
+- [Data sources and acknowledgements](#data-sources-and-acknowledgements)
+- [Use of AI tools](#use-of-ai-tools)
 
-**Safety and scope:** the event-time forecast only covers the event's scheduled start, not its full duration. NEA's 24-hour forecast is regional and its venue-region assignment is an approximation using representative region points; the feed covers currently published periods, not arbitrary future dates. If a period does not cover the start, no score is returned. Primary/backup comparison is a weather-score heuristic only and does not validate access, capacity, shelter, suitability, availability, official safety instructions or full-duration conditions. Routine risk mappings and bands are experimental RainReady assumptions, not official NEA thresholds or a safety guarantee. Current rainfall and historical probability are excluded from event-time scoring; remaining forecast/sensitivity weights are renormalised. The air-quality path reports the nearest region's official 24-hour PSI and follows NEA health-advisory bands, but it is not medical advice and is not folded into the routine weather score. Lightning observations are not an official warning or all-clear; the separate organiser-confirmed alert is an explicit local demo input. Organisers remain responsible for decisions, and the system never auto-resumes an activity. OneMap search is an address-to-coordinate lookup only; organisers must verify the selected result. Authentication is a local course-prototype implementation, not production-hardened identity infrastructure; do not expose it publicly or deploy it to AWS. AWS Cognito, verified email/account recovery/MFA, distributed rate limiting, production monitoring, cloud storage controls and security review are not implemented.
+## Features
 
-## Run locally
+- **Event management:** venue search through OneMap, date, time, activity type, weather sensitivity and an optional sheltered backup venue.
+- **Event-time risk:** a 0–100 score and level (low, medium, high, critical) for the event's start, built from NEA forecasts, rainfall and sensitivity, with every input and reason shown.
+- **Planning outlook:** a labelled planning estimate for events 2–4 days ahead from NEA's 4-day outlook.
+- **Safety overrides:** a confirmed lightning alert forces "stop and seek shelter"; haze (PSI) is shown as a separate health advisory.
+- **Decisions and audit trail:** continue, prepare, relocate, postpone or cancel, with a required reason.
+- **Participant updates:** a join link with recorded consent; relocate, postpone and cancel decisions email every subscriber through Amazon SES, with one-click unsubscribe.
+- **Organisations:** separate workspaces with owners and invited members, isolated by PostgreSQL row-level security.
+- **Plans and billing:** Free (1 event, sponsored messages), Community (100 events, no ads, past events as templates) and Enterprise (500 events), with Stripe Checkout in test mode.
+- **Demo tools:** a developer-only page to switch plans, add synthetic participants, read the email outbox and simulate extreme weather.
 
-Requires Node.js **24.15 or later** (the project uses the built-in `node:sqlite` module; use the same Node version across the team). No npm package dependencies are required.
+## Architecture
 
-```sh
-npm start
-npm test
+![RainReady on AWS](docs/images/architecture.png)
+
+One Node.js container on **Amazon ECS (Express mode, Fargate)** serves both the web pages and the JSON API behind an HTTPS **Application Load Balancer**. Data lives in a private **Amazon RDS for PostgreSQL** database with PostGIS and row-level security. **AWS Secrets Manager** holds every credential, **Amazon SES** sends participant emails and **CloudWatch Logs** collects output. The app calls three external services: NEA's APIs on data.gov.sg, OneMap and Stripe.
+
+Key design choices:
+
+- **One modular service:** simpler to build, test and operate than microservices; Fargate adds a second copy under load.
+- **PostgreSQL:** relational data, transactions for plan limits and row-level security for tenant isolation.
+- **Weather on demand:** NEA data is fetched when an organiser opens an event, so there is no scheduler and nothing is fetched that nobody reads. Each source has an 8-second timeout and falls back to its last good reading.
+- **Hosted payments:** card details stay on Stripe's page and never reach RainReady.
+
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Backend | Node.js 24 (ES modules), built-in `node:http` and `node:sqlite`; runtime dependencies `pg` and `@aws-sdk/client-sesv2` only |
+| Frontend | Plain HTML, CSS and JavaScript (single page), no build step |
+| Database | PostgreSQL 16 + PostGIS (cloud and optional local); SQLite for zero-setup local runs |
+| Cloud | Amazon ECS Fargate (Express mode), ECR, RDS, Secrets Manager, SES, CloudWatch, IAM |
+| External | NEA real-time APIs (data.gov.sg), OneMap, Stripe |
+| Tests | Node's built-in test runner; SQL tests for PostgreSQL |
+
+## Repository structure
+
+```text
+rainready/
+├── backend/
+│   ├── server.mjs               HTTP server and all API routes
+│   ├── risk-engine.mjs          scoring formula and risk bands
+│   ├── risk-assessment.mjs      forecast selection for the event's start, planning outlook, PSI advisory
+│   ├── weather-data.mjs         NEA API clients, nearest-location matching, last-good fallback
+│   ├── geocoding.mjs            OneMap search with automatic token renewal
+│   ├── auth.mjs                 accounts, sessions, organisations, invitations
+│   ├── event-store-pg.mjs       PostgreSQL data access (event-store.mjs: SQLite)
+│   ├── notifications.mjs        decision emails (outbox or SES)
+│   ├── participants.mjs         join links, consent, unsubscribe
+│   ├── billing.mjs              Stripe Checkout, webhook verification
+│   ├── plans.mjs, ads.mjs       plan limits, sponsored messages
+│   ├── deployment.mjs           cloud start-up checks (course-demo mode)
+│   ├── db-setup.mjs             first-start database setup on AWS
+│   ├── developer.mjs            developer-only demo tools
+│   ├── weather-simulation.mjs   simulated extreme weather for demos
+│   └── *.test.mjs               automated tests
+├── frontend/
+│   ├── index.html               organiser app
+│   └── join.html                public join and unsubscribe page
+├── database/postgres/
+│   ├── init/                    schema, row-level security, reference data
+│   ├── migrations/              001–004
+│   ├── tests/                   SQL tests (tenant isolation, safety rules, location query)
+│   └── docker-compose.yml       local PostgreSQL + PostGIS
+├── deploy/aws/                  IAM policies and ECS settings; step-by-step guide
+├── docs/                        API contract, data sources, user flow
+├── Dockerfile                   production container image
+└── .env.example                 configuration template
 ```
 
-Open `http://127.0.0.1:8787`. The API binds to loopback for local development. On first launch, choose **Create account** and create a workspace; account passwords must be at least 12 characters. The workspace owner can privately share a one-time invitation code, view members, and remove a member (which revokes all that user's sessions). Any signed-in user can use **Sign out all devices** to revoke every session on their account. Members join through **Create account** using the invitation code. Accounts, sessions and rate-limit counters are stored in the local ignored SQLite database. To enable address search, copy `.env.example` to `.env`. Either set a current `ONEMAP_ACCESS_TOKEN`, or set both `ONEMAP_API_EMAIL` and `ONEMAP_API_PASSWORD` so the backend can generate a token and automatically refresh/retry once when OneMap rejects an expired token. Generated tokens are cached in server memory and are never returned to the browser. OneMap documents a three-day token lifetime. Keep all OneMap values only in the ignored local `.env` or a managed secret store, never in frontend code or GitHub. Without a token or credentials, event weather functions and predefined demo venues still work, while live address searches return a clear setup message. Do not add actual credentials to `.env.example`.
+## Getting started (local)
 
-## Sponsored messages (ads)
+### Prerequisites
 
-The Free plan of the freemium model shows **one text-only sponsored message at the bottom of each workspace page** (Overview, Events, Decision history, Settings). It is designed not to get in the way:
+- Node.js **24.15 or later**
+- Optional: Docker Desktop, for a local PostgreSQL
+- Optional: a free [OneMap API account](https://www.onemap.gov.sg/apidocs/) for venue search
 
-- it sits below all page content and is never shown inside dialogs or forms, on the sign-in screen, or between events; nothing pops up, moves, auto-plays or covers the page;
-- it is labelled **Sponsored**, names the sponsor, and shows the destination site; links open in a new tab with `rel="sponsored noopener noreferrer"`;
-- it **pauses while a lightning alert is confirmed or any upcoming event is at critical risk**, so safety information always has the organiser's full attention;
-- **only a paid plan removes ads.** Every organisation has a plan (`free`, `community` or `enterprise`; new organisations start on `free`). The server checks the selected organisation's plan on each ad request, so there is no browser setting or API call that hides ads; the **Remove ads** link in the slot explains the paid plans. Settings › Workspace shows the plan and ad status;
-- no third-party ad script, cookie or tracking pixel is loaded. Ads come from the RainReady backend's own catalogue (`backend/ads-catalogue.json`). Selection is contextual only: the page, and whether an upcoming event needs a wet-weather plan.
+### Run
 
-The backend counts an **impression** when at least half of the slot has been visible for one second (once per ad and page per visit) and a **click** when the link is followed. Counts are stored per ad, placement and Singapore day in `ad_daily_stats`, with no user, organisation or event identifier. `npm run ads:report` prints impressions, clicks and click-through rate for the last 30 days (or `npm run ads:report -- 2026-11-01 2026-11-30`).
+```sh
+git clone https://github.com/rainready-nus/rainready.git
+cd rainready
+npm install
+cp .env.example .env        # then add ONEMAP_API_EMAIL and ONEMAP_API_PASSWORD
+npm start
+```
 
-Settings: `RAINREADY_ADS=house` (default) or `off`; `RAINREADY_ADS_FILE` points to another catalogue. The demo catalogue uses fictional sponsors and `example.com` links only. Replace it with real, approved sponsor messages before any public launch, and check that each message meets the Singapore Code of Advertising Practice and PDPA requirements. `RAINREADY_ADS=off` is an operator switch for the whole server (for example a demo without ads), not a user setting.
+Open http://127.0.0.1:8787 and choose **Create account**. Data is stored in `backend/data/rainready.sqlite` (ignored by Git). Without OneMap credentials, everything except live venue search works.
 
-**Changing a plan.** There is no payment integration yet, so an operator changes the plan from the command line, using the organisation ID shown in Settings › Workspace: `npm run plan -- <organizationId>` shows it and `npm run plan -- <organizationId> community` changes it (`free`, `community` or `enterprise`). Members see the change the next time they load the app. Later, a payment provider's webhook would call the same store method (`setOrganizationPlan`) after a successful payment. A PostgreSQL database created earlier needs `migrations/003_organization_plan.sql` once.
+### Use PostgreSQL locally (optional)
 
-## Participant emails
+```sh
+cd database/postgres
+cp .env.example .env        # set the passwords
+docker compose up -d
+```
 
-The proposal's rule is kept: **participants are notified only after the organiser confirms a decision.**
+Then set `RAINREADY_DB_DRIVER=postgres` and the `RAINREADY_DB_*` settings in the root `.env`, and restart with `npm start`. See [database/postgres/README.md](database/postgres/README.md).
 
-1. On an event, the organiser opens **Participants** and creates a **join link**, then shares it (chat group, poster QR code, sign-up form).
-2. A participant opens the link, enters their email (name optional) and must tick a consent box. RainReady stores the exact consent text and time with their record. No account is needed.
-3. When the weather changes and the organiser records **Relocate**, **Postpone** or **Cancel**, the decision form shows "Email N participants when I confirm" with a preview of the email. Confirming saves the decision and sends one email per subscribed participant. Continue and Prepare never email anyone.
-4. Every email has an unsubscribe link (and one-click unsubscribe headers for mail apps). Organisers can remove a participant, which deletes the record. Decision history shows how many were emailed.
+## Configuration
 
-Each decision is emailed at most once, even if the request is repeated. Up to 500 participants per event are sent directly from the request; a larger deployment would move sending to a queue (for example SQS) with retries.
+All configuration is through environment variables: a `.env` file locally, ECS service settings in the cloud. `.env.example` documents every variable. Never commit `.env`.
 
-Where emails go is a server setting:
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `PORT` | HTTP port | `8787` |
+| `RAINREADY_DEPLOYMENT` | `local`, or `course-demo` for AWS (requires PostgreSQL with verified TLS, secure cookies, trusts the load balancer) | `local` |
+| `RAINREADY_DB_DRIVER` | `sqlite` or `postgres` | `sqlite` |
+| `RAINREADY_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | PostgreSQL connection (app role `rainready_app`) | local Docker values |
+| `RAINREADY_DB_SSL`, `RAINREADY_DB_SSL_CA` | `off`, `verify-ca` or `verify-full`; CA bundle path | `off` |
+| `RAINREADY_DB_SETUP`, `RAINREADY_DB_ADMIN_USER`, `RAINREADY_DB_ADMIN_PASSWORD` | First start on AWS only: create the database, schema and app role | off |
+| `ONEMAP_API_EMAIL`, `ONEMAP_API_PASSWORD` | OneMap venue search; the token is renewed automatically | none |
+| `RAINREADY_STRIPE_SECRET_KEY` | Stripe test key (`sk_test_` or `rk_test_`; live keys are refused) | payments off |
+| `RAINREADY_STRIPE_PRICE_COMMUNITY`, `RAINREADY_PLAN_COMMUNITY_PRICE` | Stripe price ID and the price label shown in the app | none |
+| `RAINREADY_STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret (`whsec_…`) | none |
+| `RAINREADY_MAILER`, `RAINREADY_MAIL_FROM` | `outbox` or `ses`; verified sender address | `outbox` |
+| `RAINREADY_PUBLIC_URL` | Base URL in email links; derived from the request when unset | request host |
+| `RAINREADY_ADS` | `house` or `off` | `house` |
+| `RAINREADY_DEMO_TOOLS`, `RAINREADY_DEVELOPER_USER_IDS` | Developer page; comma-separated user IDs (shown in Settings) | off |
 
-| `RAINREADY_MAILER` | What happens |
-|---|---|
-| `outbox` (default) | Nothing leaves the server. Emails are stored and shown on the Developer page's outbox. Use this locally and for rehearsals. |
-| `ses` | Sent through Amazon SES v2 from `RAINREADY_MAIL_FROM`, using the server's AWS credentials (an IAM role in the cloud). Needs `npm install` for `@aws-sdk/client-sesv2`. In the SES sandbox, only verified addresses receive mail, so verify the demo recipients first. |
+## Deployment on AWS
 
-`RAINREADY_PUBLIC_URL` must be the address participants can open (for example `https://rainready.example.org`), because join and unsubscribe links are built from it. Participant emails are personal data: use only consenting test recipients or the synthetic `@example.com` demo participants, as stated in the proposal.
+The live service runs in **ap-southeast-1 (Singapore)**:
 
-## Plans and payments (Stripe test mode)
+| Resource | Configuration |
+| --- | --- |
+| ECS service `rainready` (Express mode, Fargate) | 0.5 vCPU, 1 GB, 1–2 tasks, port 8787, health check `/health`, HTTPS load balancer |
+| ECR repository `rainready` | One image tag per release (`v1`, `v2`, …) |
+| RDS PostgreSQL 16 `rainready-dev` | db.t4g.micro, Single-AZ, 20 GB gp3, no public access, encrypted, 7-day backups, deletion protection |
+| Secrets Manager | `rainready/dev/db-app`, `db-admin`, `stripe`, `onemap` |
+| IAM role `rainready-execution-role` | Pulls the image, writes logs, reads only `rainready/*` secrets |
+| CloudWatch Logs | Container output |
+| SES (optional) | Real participant emails |
 
-| Plan | Events stored | Templates | Sponsored messages |
-|---|---|---|---|
-| Free | 1 at a time (delete it to create another) | No | Yes |
-| Community | up to 100 | Start a new event from a past one | No |
-| Enterprise | up to 500 | Yes | No |
+### First deployment
 
-The limit is enforced by the server in the same database transaction that saves the event, so it holds even for scripts or simultaneous clicks; the API answers 403 `plan_event_limit` with a message. At the limit, **Add event** explains the options instead of opening the form. Moving to a smaller plan never deletes events: the organisation keeps them but cannot add another until it is under the new limit. In the Add event form, Community and Enterprise can pick **Start from a past event**, which copies the name, venues (with their saved coordinates), participants, type and sensitivity; the organiser sets the new date and time.
+1. **Database:** create the RDS instance; store its master password as `rainready/dev/db-admin` and an app password (16+ characters) as `rainready/dev/db-app` in Secrets Manager.
+2. **Image:** build and push to ECR:
+   ```sh
+   docker build --platform linux/amd64 -t <account>.dkr.ecr.ap-southeast-1.amazonaws.com/rainready:v1 .
+   docker push <account>.dkr.ecr.ap-southeast-1.amazonaws.com/rainready:v1
+   ```
+3. **Role:** create `rainready-execution-role` with `AmazonECSTaskExecutionRolePolicy` plus the inline policy in [`deploy/aws/execution-role-read-secrets.json`](deploy/aws/execution-role-read-secrets.json).
+4. **Service:** in ECS, create an Express mode service with the image, the role, port `8787`, health path `/health`, the database's VPC and the environment variables below.
+5. **Network:** allow PostgreSQL (5432) from the VPC's address range in the database's security group.
+6. **First start:** `/health` shows `"databaseSetup":"done"` once the app has created the database, schema and `rainready_app` role. Then remove `RAINREADY_DB_SETUP` and `RAINREADY_DB_ADMIN_PASSWORD` from the service.
 
-**Plan & billing** shows Free, Community and Enterprise. The organisation owner can upgrade to Community with **Stripe Checkout in test mode**: RainReady creates a Checkout Session, the browser goes to Stripe's page (card `4242 4242 4242 4242`, any future date, any CVC), and on return RainReady asks Stripe for that session and switches the plan only if Stripe says it was paid for this organisation. A signed webhook does the same in the cloud and also handles cancellations made in Stripe. Card details never reach RainReady. Only Stripe **test** keys are accepted; live keys stop the server at start-up.
+ECS service settings (secrets are entered as `<secret ARN>:<key>::`):
 
-Setup (free Stripe account, test mode): create a product "RainReady Community" with a recurring monthly price, then set in `.env`: `RAINREADY_STRIPE_SECRET_KEY=sk_test_...` and `RAINREADY_STRIPE_PRICE_COMMUNITY=price_...`. For the webhook on the cloud deployment, add an endpoint `https://<your domain>/api/billing/webhook` for `checkout.session.completed`, `customer.subscription.updated` and `customer.subscription.deleted`, and set `RAINREADY_STRIPE_WEBHOOK_SECRET=whsec_...`. Locally, the webhook is optional (`stripe listen --forward-to localhost:8787/api/billing/webhook` if you have the Stripe CLI). Without Stripe keys, the page says payments are not set up and nobody can upgrade except through `npm run plan` or the developer tools.
+| Variable | Type | Value |
+| --- | --- | --- |
+| `RAINREADY_DB_DRIVER`, `_HOST`, `_NAME`, `_USER`, `_SSL` | Plain | `postgres`, RDS endpoint, `rainready`, `rainready_app`, `verify-full` |
+| `RAINREADY_DB_PASSWORD` | Secret | `rainready/dev/db-app` → `password` |
+| `RAINREADY_DB_SETUP`, `RAINREADY_DB_ADMIN_USER` | Plain, first start only | `true`, master username |
+| `RAINREADY_DB_ADMIN_PASSWORD` | Secret, first start only | `rainready/dev/db-admin` → `password` |
+| `ONEMAP_API_EMAIL`, `ONEMAP_API_PASSWORD` | Secret | `rainready/dev/onemap` → `email`, `password` |
+| `RAINREADY_STRIPE_SECRET_KEY`, `RAINREADY_STRIPE_WEBHOOK_SECRET` | Secret | `rainready/dev/stripe` → `secret_key`, `webhook_secret` |
+| `RAINREADY_STRIPE_PRICE_COMMUNITY` | Plain | Stripe `price_…` ID |
 
-## Developer demo tools
+The image already sets `RAINREADY_DEPLOYMENT=course-demo`, the port and the RDS certificate bundle. The full click-by-click guide, including the Stripe webhook and troubleshooting, is in [`deploy/aws/README.md`](deploy/aws/README.md).
 
-For the demo, developers can show the Free and paid plans side by side and show participant emails without real people or real payments. A **Developer** page appears only for listed developer accounts; for everyone else the `/api/dev/*` routes answer 404.
+### Operations
 
-1. Sign up, then copy **Your user ID** from Settings › Workspace.
-2. On the server (local `.env` or the cloud environment), set `RAINREADY_DEMO_TOOLS=true` and `RAINREADY_DEVELOPER_USER_IDS=<id>,<id>`, then restart.
-3. The Developer page can switch the organisation between Free, Community and Enterprise without paying (recorded as a developer change), add synthetic `@example.com` participants to an event, and show the email outbox with the exact text sent.
-4. **Simulate extreme weather** (Developer page): pick an event and a scenario (lightning alert, heavy thunderstorm at the start time, or unhealthy haze at PSI 180) to show the whole flow on any day: the alert on the Overview, the organiser decision (a suggested decision and reason are filled in) and the participant emails. The simulation lives only in the developer's browser tab, every result is labelled SIMULATED, and emails sent during it are marked `[RainReady DEMO]` with a "demonstration only" line. Real weather data are never changed.
+- **Release:** push the next tag (`v2`, …) and select it in the ECS service. ECS waits for the new task to pass its health check before stopping the old one, and rolls back automatically if it fails.
+- **Monitor:** `GET /health` reports version, storage and setup status; CloudWatch Logs show which features are active at start-up.
+- **Migrations:** numbered SQL files in `database/postgres/migrations/`; the first-start setup applies any that are missing.
+- **Tear down:** delete the ECS service, then the RDS instance (turn off deletion protection first), the secrets, the ECR repository and the IAM role.
 
-User IDs are used instead of emails because sign-up does not verify email addresses: anyone could register a developer's email, but nobody can claim an existing user ID. Turn the tools off (`RAINREADY_DEMO_TOOLS=false`) after the demo.
+## Testing
 
-## Local data and migration
+```sh
+npm test            # 111 tests; 12 PostgreSQL tests are skipped without a database
+npm run test:pg     # PostgreSQL tests (needs the local database from docker compose)
+```
 
-The default database is `backend/data/rainready.sqlite` and is ignored by Git. It stores local accounts, hashed sessions, organisation memberships, invitations, events, decisions, notification previews, aggregated ad counters, consenting participants' emails, participant notifications and billing records. Every event row has an organisation ID; the backend verifies membership on each request before returning or changing it. On first start, the backend imports `backend/data/events.json` if it exists, records that the one-time import has completed, and leaves the JSON file untouched as a recovery copy. The first registered workspace takes ownership of imported legacy events. Set `RAINREADY_DB_FILE` and optionally `RAINREADY_LEGACY_DATA_FILE` to use other local paths. Back up the SQLite file before deleting or replacing local data.
+Tests cover the risk engine, NEA parsing, geocoding, accounts and tenant isolation, plan limits, ads, payments against a fake Stripe, participant emails, cloud start-up checks, database setup and the weather simulation. SQL tests in `database/postgres/tests/` check row-level security, the lightning safety rule and the `events_near` query.
 
-SQLite here is for a single-machine prototype, not a hardened production database. It is not automatically encrypted or backed up. The app stores a participant **count only**, not names, emails, phone numbers or other participant personal data.
+## API overview
 
-## PostgreSQL database (local baseline; app not switched yet)
+All endpoints return JSON. Organiser endpoints need a session cookie and an `X-RainReady-Organization` header; state-changing requests must come from the app's own origin. Full details: [`docs/api-contract.md`](docs/api-contract.md).
 
-[`database/postgres/`](database/postgres/README.md) holds a local PostgreSQL 16 + PostGIS database in Docker with the same tables as the SQLite store, plus row-level security per organisation, append-only decisions and previews, stored risk assessments, organiser-confirmed lightning alerts (no `continue` until an all-clear is recorded), data-source freshness and an audit log. `npm run db:export` copies existing SQLite data into a PostgreSQL load script without modifying the SQLite file. The backend still uses SQLite until a PostgreSQL storage adapter is added; the steps are listed in that folder's README. This is also the schema intended for RDS PostgreSQL later.
+| Area | Endpoints |
+| --- | --- |
+| Health | `GET /health` |
+| Accounts | `POST /api/auth/register`, `/login`, `/logout`, `/logout-all`; `GET /api/auth/me`; `/api/auth/members`, `/api/auth/invitations` |
+| Events | `GET, POST /api/events`; `GET, PATCH, DELETE /api/events/{id}` |
+| Weather | `GET /api/assessment`, `GET /api/weather`, `GET /api/geocode` |
+| Decisions | `POST /api/events/{id}/decisions`; `GET /api/events/{id}/notification-preview` |
+| Participants | `/api/events/{id}/participants`, `/api/events/{id}/join-link`; public `/join/{token}`, `/unsubscribe/{token}` |
+| Billing | `GET /api/billing`; `POST /api/billing/checkout`, `/confirm`, `/cancel`; `POST /api/billing/webhook` (Stripe) |
+| Ads | `GET /api/ads`; impression and click tracking |
+| Developer | `/api/dev/status`, `/api/dev/plan`, `/api/dev/outbox` (developer accounts only) |
 
-## AWS course demo (ECS Express Mode + RDS)
+## How the risk score works
 
-For the course demo, the whole app (frontend and backend in one container) runs on **Amazon ECS Express Mode**, which provides an HTTPS address (`https://<name>.ecs.ap-southeast-1.on.aws`), a load balancer and logs, with **Amazon RDS for PostgreSQL** as the database and **AWS Secrets Manager** for passwords and keys. The setup guide's Part C walks through it; the files are `Dockerfile`, `.dockerignore` and `deploy/aws/`.
+1. Six NEA APIs (2-hour, 24-hour and 4-day forecasts, rainfall, lightning, PSI) are fetched in parallel; the nearest area, gauge and region to the venue are used.
+2. A forecast counts only if its valid period covers the event's start. Rainfall measures the present, so it is used only for current checks.
+3. Inputs are normalised to 0–100. Forecast wording ranges from fair (5) to heavy thundery showers (100); sensitivity is low 20, medium 50 or high 85.
+4. The score is a weighted average of the available inputs (forecast 0.50, rainfall 0.20, history 0.15 (reserved), sensitivity 0.15), with the weights renormalised over those inputs.
+5. Levels: under 30 low, 30–54 medium, 55–74 high, 75+ critical. A confirmed lightning alert overrides the score to 100.
 
-On its first start with `RAINREADY_DB_SETUP=true`, the app sets up the empty RDS database itself (schema, security rules, the app's own login), so no tunnel or `psql` is needed; remove that setting and the admin password afterwards. The container runs with `RAINREADY_DEPLOYMENT=course-demo`. In this mode the server listens on all addresses inside the container, trusts the load balancer's `X-Forwarded-Proto`/`X-Forwarded-For` headers (so the origin check sees https and rate limits see each visitor), always sets `Secure` cookies, requires an `Origin` header on changes, and refuses to start unless the database is PostgreSQL over verified TLS. Without the mode, the server refuses to listen on anything but `127.0.0.1`. This is still the prototype's own sign-in, so use synthetic accounts and data only and take the service down after the demo; the production gates below still apply, and `RAINREADY_PUBLIC_DEPLOYMENT=true` stays blocked.
+Example: "Thundery Showers" (85) at a medium-sensitivity event (50) gives (0.50 × 85 + 0.15 × 50) / 0.65 = 77, which is **critical**.
 
-## Production direction (not implemented)
+The weights and mappings are prototype assumptions, not NEA guidance, and are documented in [`docs/data-sources.md`](docs/data-sources.md).
 
-A production architecture would add a static frontend on S3 + CloudFront, an API on API Gateway + Lambda or ECS, and managed application storage on Amazon RDS for PostgreSQL. Production identity should move to Amazon Cognito (or another reviewed identity provider), with backend verification and server-side organisation membership checks. Scheduled ingestion/monitoring can be evaluated with EventBridge and CloudWatch. This is a future migration plan—not a claim that AWS resources or cloud persistence are already running. Confirm course-account permissions, quotas and cost before provisioning. The current local password/session implementation is not approved for public or AWS exposure. Setting `RAINREADY_PUBLIC_DEPLOYMENT=true` intentionally causes the local server to fail at startup; this is a guardrail, not a production mode switch.
+## Security and privacy
 
-Before any public release, the team must complete and verify all of these gates:
+- **Tenant isolation:** every tenant table has `organization_id`; PostgreSQL row-level security limits each transaction to one organisation, and the app's database role cannot bypass it.
+- **Accounts:** scrypt password hashing; 12-hour sessions stored only as SHA-256 hashes, in HttpOnly, Secure, SameSite=Strict cookies; per-address rate limits.
+- **Transport and secrets:** HTTPS at the load balancer; verified TLS to RDS; all credentials in Secrets Manager, none in code or the image.
+- **Payments:** Stripe hosted checkout; the plan changes only after the subscription's current status is confirmed with Stripe; webhooks are signature-checked.
+- **Participants:** emails are stored only with recorded consent, every email has a one-click unsubscribe, and removing a participant erases their address from past deliveries.
+- **Data:** use synthetic data only. Never commit `.env`, keys or database files (see `.gitignore`).
 
-1. Integrate Cognito (or another approved managed identity provider); validate issuer, audience/client, signature, expiry and token use on every protected backend request. Move email verification, password reset and MFA policy to that provider; none is simulated by the local login screen.
-2. Migrate SQLite to private RDS PostgreSQL. Put the database in private subnets, allow network access only from the application role/security group, require TLS, encrypt storage and snapshots with KMS, enable automated backups/point-in-time recovery, and perform a restore test. Define least-privilege application DB permissions.
-3. Put the API behind API Gateway/WAF or an equivalent edge; configure exact HTTPS origins and secure cookies/headers, trusted-proxy handling, distributed throttling, request-size limits, alarms and redacted structured logs. The current database-backed throttle is only for one local process and is not a substitute for WAF/distributed limits.
-4. Keep runtime credentials in Secrets Manager/approved parameter store and use least-privilege IAM roles. For CI/CD use GitHub OIDC with narrowly scoped roles; do not create long-lived AWS keys.
-5. Review organization ownership, invitations, membership revocation, audit retention, privacy notice/data deletion, incident response, backup recovery, dependency/security scans and the complete user journey. Conduct a security review before enabling public traffic.
+## Demo guide
 
-The local prototype now demonstrates owner-only member listing/invitations, member removal with session revocation, account-wide logout, strict optional origin allowlisting, and SQLite-persisted per-process login/register throttling. These do not make it production-ready. Email verification/recovery/MFA, Cognito, RDS, distributed rate limits/WAF, monitoring and recovery controls remain unimplemented and are release blockers.
+1. Add your user ID (Settings) to `RAINREADY_DEVELOPER_USER_IDS` and set `RAINREADY_DEMO_TOOLS=true`.
+2. On the **Developer** page, add demo participants to an event and choose **Simulate extreme weather** (lightning, heavy thunderstorm or PSI 180 haze).
+3. On the Overview, open the event, record a decision and confirm the email; read it under **Email outbox**. Simulated results and emails are labelled as demonstrations.
+4. Compare plans with the plan switch, or upgrade through **Plan & billing** with Stripe's test card `4242 4242 4242 4242` (any future expiry, any CVC).
 
-Credential handling when deployment begins:
+## Limitations and roadmap
 
-- Commit source code and placeholder configuration only. `.env`, local SQLite files, AWS credential files, keys and generated data are excluded by `.gitignore`.
-- OneMap tokens and other runtime secrets belong in AWS Secrets Manager (or an approved parameter store) and should be retrieved by the backend using a narrowly scoped Lambda IAM execution role. Never put them in browser code, a GitHub commit, or a public issue.
-- For GitHub Actions deployment, store only the specific CI/CD values as GitHub Actions Secrets/Variables, prefer short-lived AWS role federation (OIDC) over long-lived access keys, and scope permissions to the required deployment resources. Runtime application secrets should remain in AWS, not be copied into the workflow.
-- Use the course-provided AWS IAM Identity Center sign-in/role flow for people; do not create, share, or commit personal passwords or long-lived AWS access keys.
-- Do not upload real participant personal data. Keep prototype data synthetic and use only aggregate participant counts.
+- Sign-in is the app's own implementation; production would use Amazon Cognito with email verification, password reset and MFA.
+- Lightning alerts are confirmed by the organiser; an official warning feed would replace this.
+- Risk weights are uncalibrated; the reserved history input awaits a validated data source.
+- Single-AZ database and in-memory weather cache; production would use Multi-AZ, a shared cache and AWS WAF in front of the load balancer.
+- Planned: API access for Enterprise through API Gateway, scheduled alerts with EventBridge, and SMS notifications.
 
-## Team workflow and status
+## Contributing
 
-Use short feature branches and Pull Requests; keep `main` runnable. Discuss API changes in [`docs/api-contract.md`](docs/api-contract.md) before frontend/backend work diverges. Event CRUD, SQLite local persistence, local login/organisation isolation, decisions, test previews and OneMap venue search are implemented. Cloud database migration, production identity integration, live notification delivery, full evaluation and AWS deployment remain future work.
+- Branch from `main` (`feat/…`, `fix/…`), keep `main` runnable, and open a Pull Request for review.
+- Run `npm test` before pushing; add tests with any behaviour change.
+- Agree API changes in `docs/api-contract.md` before frontend and backend work diverge.
+- Schema changes go in a new numbered file in `database/postgres/migrations/`.
 
-For the current implementation status, local setup, verification steps and remaining-work boundaries, see [`docs/HANDOFF.md`](docs/HANDOFF.md).
+## Data sources and acknowledgements
 
+- Weather, lightning and air-quality data: National Environment Agency, via [data.gov.sg](https://data.gov.sg), used under the [Singapore Open Data Licence](https://data.gov.sg/open-data-licence).
+- Address search: [OneMap](https://www.onemap.gov.sg), Singapore Land Authority.
+- Payments: [Stripe](https://stripe.com) (test mode).
+
+## Use of AI tools
+
+Parts of the code, tests and documentation, including the AWS deployment setup, payment and notification features and this README, were drafted with Claude (Anthropic), an AI assistant. The team reviewed, ran and tested all generated code. The team is responsible for the content of the submission.  
+
+---
+
+Developed by the RainReady team for NUS CS5224 Cloud Computing. Not licensed for reuse outside the course.
